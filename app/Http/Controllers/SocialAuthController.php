@@ -16,6 +16,14 @@ class SocialAuthController extends Controller
 
     public function redirect(Request $request, Platform $platform): RedirectResponse
     {
+        // The platform returns to APP_URL. If the app was opened on another address (e.g. 127.0.0.1
+        // instead of localhost), the login session would be lost on return, so switch addresses first.
+        $appRoot = rtrim(config('app.url'), '/');
+
+        if (strcasecmp($request->root(), $appRoot) !== 0) {
+            return redirect()->away($appRoot.$request->getRequestUri());
+        }
+
         $driver = $this->social->driver($platform);
 
         if (! $driver->configured()) {
@@ -106,6 +114,6 @@ class SocialAuthController extends Controller
 
     private function callbackUrl(Platform $platform): string
     {
-        return route('accounts.callback', $platform);
+        return SocialManager::callbackUrl($platform);
     }
 }

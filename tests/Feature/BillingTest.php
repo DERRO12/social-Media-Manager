@@ -165,6 +165,25 @@ class BillingTest extends TestCase
         $this->get('/accounts/connect/youtube?reconnect=1')->assertRedirectContains('accounts.google.com');
     }
 
+    public function test_oauth_always_uses_the_app_url_as_redirect_uri(): void
+    {
+        config(['app.url' => 'http://localhost:8000']);
+        Setting::put('youtube.client_id', 'id');
+        Setting::put('youtube.client_secret', 'secret', encrypt: true);
+
+        $this->actingAs(User::factory()->create());
+
+        // Opened on 127.0.0.1: first moved to the APP_URL address so the session survives the round trip.
+        $this->get('http://127.0.0.1:8000/accounts/connect/youtube')
+            ->assertRedirect('http://localhost:8000/accounts/connect/youtube');
+
+        // On the APP_URL address, Google is given exactly the registered redirect URI.
+        $location = $this->get('http://localhost:8000/accounts/connect/youtube')->headers->get('Location');
+        parse_str(parse_url($location, PHP_URL_QUERY), $query);
+
+        $this->assertSame('http://localhost:8000/accounts/callback/youtube', $query['redirect_uri']);
+    }
+
     public function test_monthly_post_limit_is_enforced(): void
     {
         $plan = Plan::create(['name' => 'Starter', 'price' => 5, 'max_posts_per_month' => 1]);

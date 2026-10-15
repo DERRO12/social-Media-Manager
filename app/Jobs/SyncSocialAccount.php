@@ -22,8 +22,11 @@ class SyncSocialAccount implements ShouldQueue, ShouldBeUnique
 
     public int $timeout = 600;
 
-    /** How many of the newest items to refresh comments for on each sync. */
-    private const COMMENT_ITEMS = 10;
+    /** How many recent posts/videos to import per sync. */
+    private const CONTENT_LIMIT = 50;
+
+    /** How many items (newest first, only ones that have comments) to refresh comments for per sync. */
+    private const COMMENT_ITEMS = 50;
 
     public function __construct(public SocialAccount $account) {}
 
@@ -39,7 +42,7 @@ class SyncSocialAccount implements ShouldQueue, ShouldBeUnique
 
         try {
             if ($driver->supports(PlatformDriver::CONTENT)) {
-                foreach ($driver->fetchContent($account) as $data) {
+                foreach ($driver->fetchContent($account, self::CONTENT_LIMIT) as $data) {
                     $item = $account->contentItems()->updateOrCreate(
                         ['platform_content_id' => $data->platformContentId],
                         $data->toAttributes(),
@@ -50,7 +53,10 @@ class SyncSocialAccount implements ShouldQueue, ShouldBeUnique
             }
 
             if ($driver->supports(PlatformDriver::COMMENTS)) {
-                $account->contentItems()->latest('published_at')->limit(self::COMMENT_ITEMS)->get()
+                // Skip items the platform says have no comments (null = count unknown, so check it).
+                $account->contentItems()
+                    ->where(fn ($q) => $q->whereNull('comments_count')->orWhere('comments_count', '>', 0))
+                    ->latest('published_at')->limit(self::COMMENT_ITEMS)->get()
                     ->each(fn (ContentItem $item) => $this->syncComments($driver, $item));
             }
 

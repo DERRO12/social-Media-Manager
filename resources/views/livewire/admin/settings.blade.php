@@ -250,7 +250,7 @@ new class extends Component {
                 <div class="rounded-lg bg-zinc-50 p-3 text-sm dark:bg-zinc-900">
                     Redirect / callback URL{{ count($platforms) > 1 ? 's' : '' }} to paste into the app:
                     @foreach ($platforms as $p)
-                        <div><code class="select-all">{{ route('accounts.callback', $p) }}</code></div>
+                        <div><code class="select-all">{{ \App\Services\Social\SocialManager::callbackUrl(\App\Enums\Platform::from($p)) }}</code></div>
                     @endforeach
                 </div>
 

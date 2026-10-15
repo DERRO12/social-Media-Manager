@@ -108,7 +108,7 @@ new class extends Component {
 <div class="flex flex-col gap-6">
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div class="flex items-center gap-4">
-            <flux:avatar size="lg" :name="$client->name" />
+            <x-avatar size="lg" :name="$client->name" />
             <div>
                 <flux:heading size="xl">{{ $client->name }}</flux:heading>
                 <flux:text>{{ $client->email }} · joined {{ $client->created_at->toFormattedDateString() }}</flux:text>
@@ -225,7 +225,7 @@ new class extends Component {
             <flux:heading size="lg" class="mb-3">Connected accounts</flux:heading>
             @forelse ($accounts as $account)
                 <div class="flex items-center gap-3 border-b border-zinc-200 py-2 last:border-0 dark:border-zinc-700">
-                    <flux:avatar size="xs" :src="$account->avatar_url" :name="$account->name" />
+                    <x-avatar size="xs" :src="$account->avatar_url" :name="$account->name" />
                     <span class="flex-1 truncate text-sm">{{ $account->name }}</span>
                     <x-platform-badge :platform="$account->platform" />
                     @if ($account->last_error)

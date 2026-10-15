@@ -125,7 +125,7 @@ new class extends Component {
                     <tr wire:key="client-{{ $client->id }}">
                         <td class="px-4 py-3">
                             <a href="{{ route('admin.client', $client) }}" wire:navigate class="flex items-center gap-3 hover:underline">
-                                <flux:avatar size="sm" :name="$client->name" />
+                                <x-avatar size="sm" :name="$client->name" />
                                 <div>
                                     <div class="font-medium">{{ $client->name }}</div>
                                     <div class="text-zinc-500">{{ $client->email }}</div>

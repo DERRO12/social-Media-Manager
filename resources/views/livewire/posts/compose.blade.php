@@ -173,7 +173,7 @@ new class extends Component {
                     @foreach ($accounts as $account)
                         <label wire:key="acc-{{ $account->id }}" class="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 p-3 has-[:checked]:border-zinc-800 has-[:checked]:bg-zinc-50 dark:border-zinc-700 dark:has-[:checked]:border-zinc-300 dark:has-[:checked]:bg-zinc-900">
                             <input type="checkbox" value="{{ $account->id }}" wire:model.live="accountIds" class="rounded" />
-                            <flux:avatar size="xs" :src="$account->avatar_url" :name="$account->name" />
+                            <x-avatar size="xs" :src="$account->avatar_url" :name="$account->name" />
                             <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ $account->name }}</span>
                             <x-platform-badge :platform="$account->platform" />
                         </label>

@@ -130,7 +130,7 @@ new class extends Component {
                             <tr wire:key="account-{{ $account->id }}">
                                 <td class="px-4 py-3">
                                     <div class="flex items-center gap-3">
-                                        <flux:avatar size="sm" :src="$account->avatar_url" :name="$account->name" />
+                                        <x-avatar size="sm" :src="$account->avatar_url" :name="$account->name" />
                                         <div>
                                             <div class="font-medium">{{ $account->name }}</div>
                                             @if ($account->username)
@@ -144,7 +144,7 @@ new class extends Component {
                                 </td>
                                 <td class="px-4 py-3"><x-platform-badge :platform="$account->platform" /></td>
                                 <td class="px-4 py-3 tabular-nums">{{ $account->content_items_count }}</td>
-                                <td class="px-4 py-3 text-zinc-500">{{ $account->last_synced_at?->diffForHumans() ?? 'Never' }}</td>
+                                <td class="px-4 py-3 text-zinc-500">{{ $account->last_synced_at?->diffForHumans() ?? 'Importing…' }}</td>
                                 <td class="px-4 py-3">
                                     <div class="flex justify-end gap-2">
                                         @if ($account->last_error)

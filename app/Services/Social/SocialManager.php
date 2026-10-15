@@ -29,6 +29,15 @@ class SocialManager
         };
     }
 
+    /**
+     * The OAuth redirect URL registered with each platform. Always built from APP_URL, so it is the same
+     * whether the app was opened at localhost, 127.0.0.1 or a LAN address (platforms match it exactly).
+     */
+    public static function callbackUrl(Platform $platform): string
+    {
+        return rtrim(config('app.url'), '/').route('accounts.callback', $platform, absolute: false);
+    }
+
     /** Which credentials group each platform uses (Facebook and Instagram share one Meta app). */
     public static function credentialGroup(Platform $platform): string
     {

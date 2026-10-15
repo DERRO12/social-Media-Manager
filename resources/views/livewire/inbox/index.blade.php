@@ -154,7 +154,7 @@ new class extends Component {
                 'border-zinc-200 dark:border-zinc-700' => $comment->read_at,
             ])>
                 <div class="flex gap-3">
-                    <flux:avatar size="sm" :src="$comment->author_avatar_url" :name="$comment->author_name ?? '?'" />
+                    <x-avatar size="sm" :src="$comment->author_avatar_url" :name="$comment->author_name ?? '?'" />
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2 text-sm">
                             <span class="font-medium">{{ $comment->author_name ?? 'Unknown' }}</span>

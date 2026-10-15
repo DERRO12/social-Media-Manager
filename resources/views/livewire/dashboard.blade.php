@@ -67,14 +67,20 @@ new class extends Component {
                 <div class="divide-y divide-zinc-200 dark:divide-zinc-700">
                     @foreach ($platforms as $account)
                         <div class="flex items-center gap-3 py-3">
-                            <flux:avatar size="sm" :src="$account->avatar_url" :name="$account->name" />
+                            <x-avatar size="sm" :src="$account->avatar_url" :name="$account->name" />
                             <div class="min-w-0 flex-1">
                                 <div class="truncate font-medium">{{ $account->name }}</div>
                                 <x-platform-badge :platform="$account->platform" />
                             </div>
                             <div class="text-right text-sm tabular-nums text-zinc-500 dark:text-zinc-400">
-                                <div>{{ $account->content_items_count }} posts</div>
-                                <div>{{ \App\Support\Metric::short((int) $account->views) }} views · {{ \App\Support\Metric::short((int) $account->likes) }} likes</div>
+                                @if ($account->last_error)
+                                    <a href="{{ route('accounts') }}" wire:navigate class="text-red-600 hover:underline dark:text-red-400">Needs attention</a>
+                                @elseif (! $account->last_synced_at)
+                                    <div class="flex items-center gap-1"><flux:icon.loading variant="micro" /> Importing…</div>
+                                @else
+                                    <div>{{ $account->content_items_count }} {{ Str::plural('post', $account->content_items_count) }}</div>
+                                    <div>{{ \App\Support\Metric::short((int) $account->views) }} views · {{ \App\Support\Metric::short((int) $account->likes) }} likes</div>
+                                @endif
                             </div>
                         </div>
                     @endforeach
@@ -89,7 +95,7 @@ new class extends Component {
                 <div class="divide-y divide-zinc-200 dark:divide-zinc-700">
                     @forelse ($recentComments as $comment)
                         <div class="flex gap-3 py-3">
-                            <flux:avatar size="xs" :src="$comment->author_avatar_url" :name="$comment->author_name ?? '?'" />
+                            <x-avatar size="xs" :src="$comment->author_avatar_url" :name="$comment->author_name ?? '?'" />
                             <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2 text-sm">
                                     <span class="font-medium">{{ $comment->author_name }}</span>
