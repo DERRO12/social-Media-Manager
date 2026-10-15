@@ -19,7 +19,12 @@ class SocialAuthController extends Controller
         $driver = $this->social->driver($platform);
 
         if (! $driver->configured()) {
-            return to_route('accounts')->with('error', "{$platform->label()} is not set up yet. Add its app keys to the .env file.");
+            return to_route('accounts')->with('error', "{$platform->label()} is not available yet. The administrator needs to add its app keys in Admin → Settings.");
+        }
+
+        // Reconnecting an existing account is always allowed; the callback enforces the limit for new ones.
+        if (! $request->boolean('reconnect') && $request->user()->remainingAccountSlots() === 0) {
+            return to_route('accounts')->with('error', 'You have reached the number of social accounts your plan allows. Upgrade your plan to connect more.');
         }
 
         $state = Str::random(40);
@@ -44,8 +49,30 @@ class SocialAuthController extends Controller
             return to_route('accounts')->with('error', $e->getMessage());
         }
 
+        $user = $request->user();
+        $slots = $user->remainingAccountSlots();
+        $connected = [];
+        $skipped = [];
+
         foreach ($accounts as $data) {
-            $account = $request->user()->socialAccounts()->updateOrCreate(
+            $exists = $user->socialAccounts()
+                ->where('platform', $data->platform)
+                ->where('platform_user_id', $data->platformUserId)
+                ->exists();
+
+            // Reconnecting an existing account never counts against the plan limit.
+            if (! $exists && $slots !== null) {
+                if ($slots <= 0) {
+                    $skipped[] = $data;
+
+                    continue;
+                }
+                $slots--;
+            }
+
+            $connected[] = $data;
+
+            $account = $user->socialAccounts()->updateOrCreate(
                 ['platform' => $data->platform, 'platform_user_id' => $data->platformUserId],
                 [
                     'name' => $data->name,
@@ -63,9 +90,18 @@ class SocialAuthController extends Controller
             SyncSocialAccount::dispatch($account);
         }
 
-        $names = collect($accounts)->map(fn ($a) => "{$a->name} ({$a->platform->label()})")->implode(', ');
+        $names = fn (array $list) => collect($list)->map(fn ($a) => "{$a->name} ({$a->platform->label()})")->implode(', ');
+        $redirect = to_route('accounts');
 
-        return to_route('accounts')->with('status', "Connected: {$names}. Importing content now…");
+        if ($connected) {
+            $redirect->with('status', 'Connected: '.$names($connected).'. Importing content now…');
+        }
+
+        if ($skipped) {
+            $redirect->with('error', 'Not connected because of your plan limit: '.$names($skipped).'. Upgrade your plan to add them.');
+        }
+
+        return $redirect;
     }
 
     private function callbackUrl(Platform $platform): string

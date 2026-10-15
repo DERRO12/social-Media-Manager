@@ -19,6 +19,14 @@ new class extends Component {
     public function publishNow(int $id): void
     {
         $post = auth()->user()->posts()->findOrFail($id);
+
+        if ($post->status === PostStatus::Draft && auth()->user()->remainingPosts() === 0) {
+            session()->flash('error', 'You have used all the posts your plan includes this month. Upgrade your plan to publish more.');
+            $this->redirectRoute('posts', navigate: true);
+
+            return;
+        }
+
         $post->update(['scheduled_at' => now()]);
         $post->dispatchPublishing();
     }

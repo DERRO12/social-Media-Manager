@@ -40,6 +40,18 @@ new class extends Component {
             ->update(['read_at' => now()]);
     }
 
+    public function refresh(): void
+    {
+        auth()->user()->socialAccounts->each(function ($account) {
+            if ($account->driver()->supports(PlatformDriver::COMMENTS)) {
+                \App\Jobs\SyncSocialAccount::dispatch($account);
+            }
+        });
+
+        session()->flash('status', 'Checking all platforms for new comments…');
+        $this->redirectRoute('inbox', navigate: true);
+    }
+
     public function startReply(int $id): void
     {
         $this->replyingTo = $id;
@@ -109,7 +121,10 @@ new class extends Component {
             <flux:heading size="xl">Inbox</flux:heading>
             <flux:text>Comments from every platform in one feed. {{ $unreadCount }} unread.</flux:text>
         </div>
-        <flux:button icon="check" wire:click="markAllRead">Mark all as read</flux:button>
+        <div class="flex gap-2">
+            <flux:button icon="arrow-path" wire:click="refresh">Refresh</flux:button>
+            <flux:button icon="check" wire:click="markAllRead">Mark all as read</flux:button>
+        </div>
     </div>
 
     <div class="flex flex-wrap items-center gap-3">

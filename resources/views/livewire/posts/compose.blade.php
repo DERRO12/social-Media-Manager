@@ -61,6 +61,12 @@ new class extends Component {
             return;
         }
 
+        if ($this->when !== 'draft' && $user->remainingPosts() === 0) {
+            $this->addError('when', 'You have used all the posts your plan includes this month. Save it as a draft, or upgrade your plan.');
+
+            return;
+        }
+
         $user->update(['timezone' => $this->timezone]);
 
         $media = null;
@@ -110,6 +116,13 @@ new class extends Component {
         $this->redirectRoute('posts', navigate: true);
     }
 
+    public function toggleAll(): void
+    {
+        $all = auth()->user()->socialAccounts()->pluck('id')->map(fn ($id) => (string) $id)->all();
+
+        $this->accountIds = count($this->accountIds) === count($all) ? [] : $all;
+    }
+
     public function with(): array
     {
         $accounts = auth()->user()->socialAccounts()->orderBy('platform')->get();
@@ -120,6 +133,7 @@ new class extends Component {
             'hasYouTube' => $selectedPlatforms->contains(Platform::YouTube),
             'hasTikTok' => $selectedPlatforms->contains(Platform::TikTok),
             'hasX' => $selectedPlatforms->contains(Platform::X),
+            'remainingPosts' => auth()->user()->remainingPosts(),
         ];
     }
 }; ?>
@@ -137,8 +151,24 @@ new class extends Component {
         </div>
     @else
         <form wire:submit="save" class="flex flex-col gap-6">
+            @if ($remainingPosts !== null)
+                <flux:callout :variant="$remainingPosts === 0 ? 'danger' : 'secondary'" icon="information-circle"
+                    :heading="$remainingPosts === 0 ? 'You have used all your posts for this month.' : $remainingPosts.' '.Str::plural('post', $remainingPosts).' left this month on your plan.'">
+                    @if ($remainingPosts === 0)
+                        <x-slot name="actions">
+                            <flux:button size="sm" :href="route('billing')" wire:navigate>Upgrade</flux:button>
+                        </x-slot>
+                    @endif
+                </flux:callout>
+            @endif
+
             <flux:field>
-                <flux:label>Post to</flux:label>
+                <div class="flex items-center justify-between">
+                    <flux:label>Post to</flux:label>
+                    <flux:button size="xs" variant="ghost" wire:click="toggleAll">
+                        {{ count($accountIds) === $accounts->count() ? 'Clear all' : 'Select all' }}
+                    </flux:button>
+                </div>
                 <div class="grid gap-2 sm:grid-cols-2">
                     @foreach ($accounts as $account)
                         <label wire:key="acc-{{ $account->id }}" class="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 p-3 has-[:checked]:border-zinc-800 has-[:checked]:bg-zinc-50 dark:border-zinc-700 dark:has-[:checked]:border-zinc-300 dark:has-[:checked]:bg-zinc-900">
@@ -203,6 +233,7 @@ new class extends Component {
                 <flux:radio value="schedule" label="Schedule" />
                 <flux:radio value="draft" label="Save draft" />
             </flux:radio.group>
+            <flux:error name="when" />
 
             @if ($when === 'schedule')
                 <flux:input type="datetime-local" wire:model="scheduledAt" label="Publish at" :description="'Your timezone: '.$timezone" />

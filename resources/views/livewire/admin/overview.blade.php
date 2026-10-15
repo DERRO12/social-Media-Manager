@@ -7,13 +7,29 @@ use App\Models\ContentItem;
 use App\Models\Post;
 use App\Models\PostTarget;
 use App\Models\SocialAccount;
+use App\Models\Subscription;
 use App\Models\User;
 use Livewire\Volt\Component;
 
 new class extends Component {
     public function with(): array
     {
+        $subs = Subscription::with('plan', 'user')->whereHas('user', fn ($q) => $q->clients())->get();
+        $paying = $subs->filter(fn ($s) => $s->isValid() && ! $s->onTrial() && $s->plan);
+        // Group revenue by currency so mixed currencies aren't added together.
+        $mrr = $paying->groupBy(fn ($s) => $s->plan->currency)
+            ->map(fn ($group, $currency) => $currency.' '.number_format($group->sum(fn ($s) => $s->plan->monthlyPrice()), 2))
+            ->implode(' + ');
+
         return [
+            'billing' => [
+                ['label' => 'On free trial', 'value' => $subs->filter->onTrial()->count()],
+                ['label' => 'Paying clients', 'value' => $paying->count()],
+                ['label' => 'Expired / no plan', 'value' => $subs->reject->isValid()->count() + User::clients()->doesntHave('subscription')->count()],
+                ['label' => 'Est. monthly revenue', 'value' => $mrr ?: '0'],
+            ],
+            'endingTrials' => $subs->filter(fn ($s) => $s->onTrial() && $s->trial_ends_at->lte(now()->addDays(7)))
+                ->sortBy('trial_ends_at')->take(10),
             'stats' => [
                 ['label' => 'Clients', 'value' => User::clients()->count()],
                 ['label' => 'New this month', 'value' => User::clients()->where('created_at', '>=', now()->startOfMonth())->count()],
@@ -49,6 +65,27 @@ new class extends Component {
             </div>
         @endforeach
     </div>
+
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        @foreach ($billing as $stat)
+            <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ $stat['label'] }}</div>
+                <div class="mt-2 text-2xl font-semibold tabular-nums">{{ is_int($stat['value']) ? \App\Support\Metric::full($stat['value']) : $stat['value'] }}</div>
+            </div>
+        @endforeach
+    </div>
+
+    @if ($endingTrials->isNotEmpty())
+        <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+            <flux:heading size="lg" class="mb-4">Trials ending in the next 7 days</flux:heading>
+            @foreach ($endingTrials as $sub)
+                <a href="{{ route('admin.client', $sub->user) }}" wire:navigate class="flex items-center gap-3 border-b border-zinc-200 py-2 text-sm last:border-0 hover:underline dark:border-zinc-700">
+                    <span class="flex-1 font-medium">{{ $sub->user->name }}</span>
+                    <span class="text-zinc-500">{{ $sub->trial_ends_at->toFormattedDateString() }} · {{ $sub->trialDaysLeft() }}d left</span>
+                </a>
+            @endforeach
+        </div>
+    @endif
 
     <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
         <flux:heading size="lg" class="mb-4">Connected accounts by platform</flux:heading>

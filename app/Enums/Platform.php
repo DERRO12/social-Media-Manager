@@ -36,6 +36,19 @@ enum Platform: string
         };
     }
 
+    /** What the client needs before clicking Connect. */
+    public function requirements(): array
+    {
+        return match ($this) {
+            self::YouTube => ['A Google account with a YouTube channel.', 'If you manage several channels, pick the right one on Google’s screen.'],
+            self::Facebook => ['A Facebook Page you are an admin of (personal profiles can’t be posted to by apps).', 'Tick every Page you want to manage when Facebook asks.'],
+            self::Instagram => ['An Instagram Business or Creator account (Instagram app → Settings → Account type).', 'It must be linked to a Facebook Page. You log in with Facebook, and Instagram is connected automatically.'],
+            self::TikTok => ['A TikTok account. Business or Creator accounts work best.', 'Until the app passes TikTok’s audit, new posts are published as private (“Only me”).'],
+            self::LinkedIn => ['Your LinkedIn profile login.', 'Posts go to your personal profile feed.'],
+            self::X => ['Your X (Twitter) account login.'],
+        };
+    }
+
     /** Short description of what the connection gives you. */
     public function description(): string
     {
