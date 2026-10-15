@@ -2,8 +2,28 @@
 
 A multi-client social media management SaaS built with Laravel 12, Livewire 4 (Volt) and Flux.
 
-Each **client** signs up, connects their own social accounts and gets their own private workspace.
-The **platform admin** sees every client, can add / suspend clients, and can open any client's workspace ("Manage").
+Each **client** signs up, gets a free trial, connects their own social accounts and gets their own private workspace.
+The **platform admin** sees every client, controls plans, trials and payments, can add / suspend clients, and can open any client's workspace ("Manage").
+
+## Subscriptions (controlled by the admin)
+
+| Where | What the admin can do |
+|---|---|
+| **Admin → Plans** | Create plans: price, currency, monthly/yearly, max social accounts, max posts per month (empty = unlimited), optional Stripe Price ID, show/hide |
+| **Admin → Settings** | Default free trial length for new sign-ups (0 = no trial), which plan's limits apply during trials, how clients can pay you manually, Stripe keys, and the social platform app keys |
+| **Admin → Clients → Open** | Give a trial of **any number of days**, extend a running trial, activate a plan by hand until a date (bank transfer, mobile money, cash, deals) or with no end date, end access now, private notes, suspend |
+| **Admin → Overview** | Clients on trial, paying clients, expired, estimated monthly revenue, trials ending in the next 7 days |
+
+How it behaves:
+
+- New clients (self sign-up or added by the admin) start the trial set in Settings automatically.
+- When a trial or plan ends, the client can only open **Plan & billing** until they pay or the admin re-activates them.
+  Their scheduled posts are not published while inactive. Their data is kept.
+- Plan limits are enforced: connecting more accounts than the plan allows and publishing beyond the monthly post limit are blocked (drafts are always allowed; reconnecting an existing account never counts).
+- Clients see a "trial ends in N days" banner and get an email 3 days before the trial ends.
+- **Online card payments are optional.** Add Stripe keys in Admin → Settings and a Stripe Price ID on each plan,
+  then point a Stripe webhook at `APP_URL/stripe/webhook` (the exact URL and events are shown on the Settings page).
+  Clients then pay with Stripe Checkout and manage cards/invoices in the Stripe portal. Without Stripe, clients see your manual payment contact instead.
 
 ## What a client can do
 
@@ -14,7 +34,12 @@ The **platform admin** sees every client, can add / suspend clients, and can ope
 | **Scheduled & sent** | Every post with its status on each platform, links to the live post, retry failed |
 | **All content** | Every video/post on their connected accounts (also ones posted outside the app) with metrics |
 | **Inbox** | Comments from all platforms in one feed: reply, mark read, filter by platform or post |
-| **Connected accounts** | Connect / sync / disconnect YouTube, Facebook Pages, Instagram, TikTok, LinkedIn, X |
+| **Connected accounts** | Step-by-step guide; connect / reconnect / sync / disconnect YouTube, Facebook Pages, Instagram, TikTok, LinkedIn, X |
+| **Plan & billing** | Current plan, trial days left, usage against limits, subscribe / switch plan |
+
+Clients never type their social passwords into this app. They click **Connect**, log in on the platform's own page
+(Google, Facebook, TikTok, …) and approve access; the platform hands back a secure access token, stored encrypted.
+That is the only method the platforms allow.
 
 ## What each platform supports
 
@@ -53,12 +78,15 @@ php artisan schedule:work
 ```
 
 - `queue:work` does the publishing, syncing and uploads in the background.
-- `schedule:work` publishes scheduled posts every minute and syncs all accounts every 15 minutes.
+- `schedule:work` publishes scheduled posts every minute, syncs all accounts every 15 minutes,
+  and every hour expires finished trials and sends trial-ending emails (`billing:maintain`).
 
 Open http://localhost:8000. Demo logins (password `password`, created by the seeder):
 
 - `admin@socialhub.test` — platform admin
-- `amara@socialhub.test`, `kofi@socialhub.test` — demo clients with fake data
+- `amara@socialhub.test` — client on the Pro plan (activated manually)
+- `kofi@socialhub.test` — client on a 5-day trial
+- `zara@socialhub.test` — client whose trial has ended (sees the "choose a plan" page)
 
 > The demo accounts have fake tokens, so Sync/Publish fail on them. Connect real accounts to test for real.
 
@@ -70,7 +98,9 @@ php artisan app:make-admin you@yourdomain.com
 
 ## Connecting the platforms
 
-Create a developer app on each platform and put its keys in `.env`.
+Create one developer app per platform (owned by you, the SaaS, not by each client). Paste its keys in
+**Admin → Settings** (stored encrypted; the page also shows the exact callback URL to copy), or put them in `.env`.
+Until a platform has keys, clients see it as "Coming soon".
 The **redirect / callback URL** for each is `APP_URL/accounts/callback/{platform}`:
 
 | Platform | Where | `.env` keys | Callback path |
@@ -104,14 +134,18 @@ TikTok audit, LinkedIn product approval). Plan for this early. It usually takes 
 - `app/Services/Social/Contracts/PlatformDriver.php` — the interface every platform implements
 - `app/Jobs/PublishPostTarget.php`, `app/Jobs/SyncSocialAccount.php` — background work
 - `resources/views/livewire/*` — the pages (Volt single-file components)
-- `app/Http/Middleware/*`, `app/Http/Controllers/ImpersonationController.php` — admin / suspension / "Manage"
-- `tests/Feature/TenancyTest.php`, `tests/Feature/PublishingTest.php` — client isolation and publishing tests
+- `app/Http/Middleware/*`, `app/Http/Controllers/ImpersonationController.php` — admin / suspension / "Manage" / subscription access
+- `app/Services/Billing/SubscriptionManager.php` — trials, manual activation, expiry (used by admin pages and Stripe)
+- `app/Services/Billing/StripeBilling.php`, `app/Http/Controllers/StripeWebhookController.php` — optional Stripe payments
+- `app/Models/Setting.php` — admin-editable settings (secrets encrypted)
+- `tests/Feature/*` — client isolation, publishing, billing and limits tests (`php artisan test`)
 
-Social access tokens are stored encrypted with `APP_KEY`. Don't lose or change it, or every client must reconnect.
+Social access tokens and secrets saved in Admin → Settings are encrypted with `APP_KEY`.
+Don't lose or change it, or every client must reconnect and you must re-enter the keys.
 
 ## Next steps worth adding
 
-- Subscriptions / billing per client (Laravel Cashier + Stripe) with plan limits (accounts, posts per month)
+- A public pricing / landing page on `/` that lists the plans
 - Teams: several users per client workspace with roles
 - A calendar view for scheduled posts, and AI caption/hashtag suggestions
 "# social-Media-Manager" 
