@@ -20,6 +20,7 @@
                     <flux:navlist.item icon="calendar-days" :href="route('posts')" :current="request()->routeIs('posts')" wire:navigate>Scheduled &amp; sent</flux:navlist.item>
                     <flux:navlist.item icon="film" :href="route('content')" :current="request()->routeIs('content')" wire:navigate>All content</flux:navlist.item>
                     <flux:navlist.item icon="chat-bubble-left-right" :href="route('inbox')" :current="request()->routeIs('inbox')" :badge="$unread ?: null" wire:navigate>Inbox</flux:navlist.item>
+                    <flux:navlist.item icon="fire" :href="route('trending')" :current="request()->routeIs('trending')" wire:navigate>Trending</flux:navlist.item>
                     <flux:navlist.item icon="link" :href="route('accounts')" :current="request()->routeIs('accounts')" wire:navigate>Connected accounts</flux:navlist.item>
                     @unless (auth()->user()->isAdmin())
                         <flux:navlist.item icon="credit-card" :href="route('billing')" :current="request()->routeIs('billing')" wire:navigate>Plan &amp; billing</flux:navlist.item>

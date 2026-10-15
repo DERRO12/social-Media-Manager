@@ -20,6 +20,7 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
     Volt::route('posts', 'posts.index')->name('posts');
     Volt::route('content', 'content.index')->name('content');
     Volt::route('inbox', 'inbox.index')->name('inbox');
+    Volt::route('trending', 'trending.index')->name('trending');
 
     Route::get('accounts/connect/{platform}', [SocialAuthController::class, 'redirect'])->name('accounts.connect');
     Route::get('accounts/callback/{platform}', [SocialAuthController::class, 'callback'])->name('accounts.callback');

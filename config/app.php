@@ -68,6 +68,13 @@ return [
     'timezone' => 'UTC',
 
     /*
+    | Proxies whose X-Forwarded-* headers are trusted, e.g. a Cloudflare Tunnel, ngrok or a load balancer.
+    | Use "*" only when the app is reachable solely through that proxy; comma-separate IPs otherwise.
+    */
+
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

@@ -11,6 +11,7 @@ use App\Services\Social\Data\AccountData;
 use App\Services\Social\Data\CommentData;
 use App\Services\Social\Data\ContentData;
 use App\Services\Social\Data\PublishResult;
+use App\Services\Social\Data\TrendingVideo;
 use App\Services\Social\PlatformException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -36,6 +37,66 @@ class YouTubeDriver extends AbstractDriver
     public function platform(): Platform
     {
         return Platform::YouTube;
+    }
+
+    /** Trending works with either a connected channel's login or a plain API key set by the admin. */
+    public function canFetchTrending(?SocialAccount $account): bool
+    {
+        return $account !== null || filled($this->config['api_key'] ?? null);
+    }
+
+    /**
+     * YouTube's "Trending" chart for a country, optionally limited to one category (10 = Music).
+     * Costs 1 quota unit per call.
+     *
+     * @return TrendingVideo[]
+     */
+    public function fetchTrending(?SocialAccount $account, string $region, ?string $categoryId = null, int $limit = 24): array
+    {
+        $request = $account ? Http::withToken($this->token($account)) : Http::withQueryParameters(['key' => $this->config['api_key']]);
+
+        $response = $request->get(self::API.'/videos', array_filter([
+            'part' => 'snippet,statistics,contentDetails',
+            'chart' => 'mostPopular',
+            'regionCode' => strtoupper($region),
+            'videoCategoryId' => $categoryId ?: null,
+            'maxResults' => min($limit, 50),
+        ]));
+
+        // Some categories have no chart in some countries; YouTube answers 404 for those.
+        if ($response->status() === 404) {
+            return [];
+        }
+
+        return array_map(fn (array $v) => new TrendingVideo(
+            id: $v['id'],
+            title: $v['snippet']['title'] ?? 'Untitled',
+            url: "https://www.youtube.com/watch?v={$v['id']}",
+            channel: $v['snippet']['channelTitle'] ?? null,
+            // maxres and medium are 16:9; "high"/"standard" are 4:3 with black bars baked in.
+            thumbnailUrl: $v['snippet']['thumbnails']['maxres']['url'] ?? $v['snippet']['thumbnails']['medium']['url'] ?? null,
+            publishedAt: isset($v['snippet']['publishedAt']) ? Carbon::parse($v['snippet']['publishedAt']) : null,
+            views: isset($v['statistics']['viewCount']) ? (int) $v['statistics']['viewCount'] : null,
+            likes: isset($v['statistics']['likeCount']) ? (int) $v['statistics']['likeCount'] : null,
+            comments: isset($v['statistics']['commentCount']) ? (int) $v['statistics']['commentCount'] : null,
+            durationSeconds: $this->seconds($v['contentDetails']['duration'] ?? null),
+        ), $this->ok($response, 'loading trending videos')->json('items', []));
+    }
+
+    /** ISO 8601 duration ("PT4M13S") to seconds. */
+    private function seconds(?string $iso): ?int
+    {
+        if (! $iso) {
+            return null;
+        }
+
+        try {
+            $i = new \DateInterval($iso);
+
+            return $i->d * 86400 + $i->h * 3600 + $i->i * 60 + $i->s;
+        } catch (\Exception) {
+            return null;
+        }
     }
 
     public function authorizationUrl(string $state, string $callbackUrl): string

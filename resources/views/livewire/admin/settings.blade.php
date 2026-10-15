@@ -16,6 +16,7 @@ new class extends Component {
         'youtube' => ['YouTube', ['youtube'], 'https://console.cloud.google.com/apis/credentials', [
             'client_id' => ['Client ID', false],
             'client_secret' => ['Client secret', true],
+            'api_key' => ['API key (optional: Trending for clients without a channel)', true],
         ]],
         'meta' => ['Facebook & Instagram (one Meta app)', ['facebook', 'instagram'], 'https://developers.facebook.com/apps', [
             'client_id' => ['App ID', false],
@@ -30,7 +31,7 @@ new class extends Component {
         'linkedin' => ['LinkedIn', ['linkedin'], 'https://www.linkedin.com/developers/apps', [
             'client_id' => ['Client ID', false],
             'client_secret' => ['Client secret', true],
-            'api_version' => ['API version (YYYYMM)', false],
+            'api_version' => ['API version (YYYYMM, leave empty for automatic)', false],
         ]],
         'x' => ['X (Twitter)', ['x'], 'https://developer.x.com/en/portal/dashboard', [
             'client_id' => ['OAuth 2.0 Client ID', false],

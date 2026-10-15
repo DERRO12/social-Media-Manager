@@ -9,6 +9,8 @@ use App\Services\Social\Contracts\PlatformDriver;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Sleep;
 use Throwable;
 
 /**
@@ -42,7 +44,7 @@ class SyncSocialAccount implements ShouldQueue, ShouldBeUnique
 
         try {
             if ($driver->supports(PlatformDriver::CONTENT)) {
-                foreach ($driver->fetchContent($account, self::CONTENT_LIMIT) as $data) {
+                foreach ($this->withRetry(fn () => $driver->fetchContent($account, self::CONTENT_LIMIT)) as $data) {
                     $item = $account->contentItems()->updateOrCreate(
                         ['platform_content_id' => $data->platformContentId],
                         $data->toAttributes(),
@@ -61,6 +63,9 @@ class SyncSocialAccount implements ShouldQueue, ShouldBeUnique
             }
 
             $account->update(['last_synced_at' => now(), 'last_error' => null]);
+        } catch (ConnectionException $e) {
+            // Still unreachable after retries: a network problem, not a broken connection. Try again next sync.
+            report($e);
         } catch (Throwable $e) {
             report($e);
             $account->update(['last_error' => mb_substr($e->getMessage(), 0, 2000)]);
@@ -69,11 +74,36 @@ class SyncSocialAccount implements ShouldQueue, ShouldBeUnique
 
     private function syncComments(PlatformDriver $driver, ContentItem $item): void
     {
-        foreach ($driver->fetchComments($this->account, $item) as $data) {
+        try {
+            $comments = $this->withRetry(fn () => $driver->fetchComments($this->account, $item));
+        } catch (ConnectionException $e) {
+            // One video's comments timing out shouldn't fail the whole account; it's retried next sync.
+            report($e);
+
+            return;
+        }
+
+        foreach ($comments as $data) {
             $item->comments()->updateOrCreate(
                 ['platform_comment_id' => $data->platformCommentId],
                 ['social_account_id' => $this->account->id, ...$data->toAttributes()],
             );
+        }
+    }
+
+    /** Retry calls that fail on network timeouts/connection resets (not on API errors like an expired login). */
+    private function withRetry(callable $call, int $attempts = 3): mixed
+    {
+        for ($try = 1; ; $try++) {
+            try {
+                return $call();
+            } catch (ConnectionException $e) {
+                if ($try >= $attempts) {
+                    throw $e;
+                }
+
+                Sleep::for($try * 2)->seconds();
+            }
         }
     }
 

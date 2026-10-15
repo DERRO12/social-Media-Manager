@@ -9,7 +9,9 @@ use App\Jobs\SyncSocialAccount;
 use App\Models\SocialAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -91,6 +93,35 @@ class PublishingTest extends TestCase
         $this->assertSame(TargetStatus::Failed, $target->fresh()->status);
         $this->assertStringContainsString('quotaExceeded', $target->fresh()->error);
         $this->assertSame(PostStatus::Failed, $post->fresh()->status);
+    }
+
+    public function test_a_network_timeout_on_comments_does_not_flag_the_account(): void
+    {
+        Sleep::fake();
+
+        Http::fake([
+            'oauth2.googleapis.com/token' => Http::response(['access_token' => 'new-token', 'expires_in' => 3600]),
+            'www.googleapis.com/youtube/v3/playlistItems*' => Http::response(['items' => [['contentDetails' => ['videoId' => 'v1']]]]),
+            'www.googleapis.com/youtube/v3/videos*' => Http::response(['items' => [[
+                'id' => 'v1',
+                'snippet' => ['title' => 'First video'],
+                'statistics' => ['viewCount' => '10', 'likeCount' => '1', 'commentCount' => '3'],
+            ]]]),
+            'www.googleapis.com/youtube/v3/commentThreads*' => function () use (&$attempts) {
+                $attempts++;
+                throw new ConnectionException('cURL error 28: SSL connection timeout');
+            },
+        ]);
+        $attempts = 0;
+
+        $account = $this->youtubeAccount();
+
+        SyncSocialAccount::dispatchSync($account);
+
+        $this->assertNull($account->fresh()->last_error);
+        $this->assertNotNull($account->fresh()->last_synced_at);
+        $this->assertSame(1, $account->contentItems()->count());
+        $this->assertSame(3, $attempts); // retried, then skipped
     }
 
     public function test_sync_imports_videos_metrics_and_comments(): void

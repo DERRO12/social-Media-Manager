@@ -203,6 +203,15 @@ class LinkedInDriver extends AbstractDriver
         );
     }
 
+    /**
+     * LinkedIn ships a dated API version every month and retires each one after about a year.
+     * Two months back is always released and still supported.
+     */
+    private function apiVersion(): string
+    {
+        return ($this->config['api_version'] ?? null) ?: now()->subMonths(2)->format('Ym');
+    }
+
     private function urn(SocialAccount $account): string
     {
         return "urn:li:person:{$account->platform_user_id}";
@@ -213,7 +222,7 @@ class LinkedInDriver extends AbstractDriver
         return Http::baseUrl(self::API)
             ->withToken($this->token($account))
             ->withHeaders([
-                'LinkedIn-Version' => $this->config['api_version'],
+                'LinkedIn-Version' => $this->apiVersion(),
                 'X-Restli-Protocol-Version' => '2.0.0',
             ])
             ->asJson();

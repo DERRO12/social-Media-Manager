@@ -73,7 +73,8 @@ return [
     'linkedin' => [
         'client_id' => env('LINKEDIN_CLIENT_ID'),
         'client_secret' => env('LINKEDIN_CLIENT_SECRET'),
-        'api_version' => env('LINKEDIN_API_VERSION', '202509'),
+        // Leave empty to use a recent version automatically (LinkedIn retires versions after ~1 year).
+        'api_version' => env('LINKEDIN_API_VERSION'),
         'community_api' => (bool) env('LINKEDIN_COMMUNITY_API', false),
     ],
 
