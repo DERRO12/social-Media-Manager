@@ -59,6 +59,8 @@ New-Item -ItemType Directory -Force $OutDir | Out-Null
 Render 120 (Join-Path $OutDir 'logo-google-120.png') $false
 # Larger copy for Meta / TikTok / LinkedIn app settings.
 Render 512 (Join-Path $OutDir 'logo-512.png') $false
+# TikTok requires a 1024x1024 app icon.
+Render 1024 (Join-Path $OutDir 'logo-1024.png') $false
 # Website icons (rounded, like the logo in the site header).
 Render 32 (Join-Path $OutDir 'favicon-32.png') $true
 Render 180 (Join-Path $OutDir 'apple-touch-icon.png') $true

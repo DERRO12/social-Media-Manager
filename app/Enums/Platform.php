@@ -58,7 +58,7 @@ enum Platform: string
             self::Instagram => 'Publish Reels, read stats, read and reply to comments. Needs a Business or Creator account linked to a Facebook Page.',
             self::TikTok => 'Publish videos and read like/comment/view counts. TikTok does not expose comment text to apps.',
             self::LinkedIn => 'Post videos to your profile. Reading posts and comments needs LinkedIn Community Management approval.',
-            self::X => 'Post videos, read metrics and replies. Requires a paid X API tier.',
+            self::X => 'Post text and videos. Importing posts, metrics and replies needs a paid X API plan.',
         };
     }
 }

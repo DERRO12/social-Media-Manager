@@ -61,6 +61,8 @@ return [
         'client_id' => env('META_APP_ID'),
         'client_secret' => env('META_APP_SECRET'),
         'graph_version' => env('META_GRAPH_VERSION', 'v23.0'),
+        // Facebook Login for Business configuration ID (optional; used instead of the scope list when set).
+        'config_id' => env('META_CONFIG_ID'),
     ],
 
     'tiktok' => [
@@ -81,6 +83,8 @@ return [
     'x' => [
         'client_id' => env('X_CLIENT_ID'),
         'client_secret' => env('X_CLIENT_SECRET'),
+        // The Free plan can only post; set true on Basic or higher to also import posts, metrics and replies.
+        'read_access' => (bool) env('X_READ_ACCESS', false),
     ],
 
 ];

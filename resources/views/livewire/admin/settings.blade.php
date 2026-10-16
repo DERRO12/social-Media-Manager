@@ -22,6 +22,7 @@ new class extends Component {
             'client_id' => ['App ID', false],
             'client_secret' => ['App secret', true],
             'graph_version' => ['Graph API version', false],
+            'config_id' => ['Login configuration ID (Facebook Login for Business)', false],
         ]],
         'tiktok' => ['TikTok', ['tiktok'], 'https://developers.tiktok.com/apps', [
             'client_id' => ['Client key', false],
@@ -53,6 +54,7 @@ new class extends Component {
     /** @var array<string, array<string, string>> */
     public array $platform = [];
     public bool $linkedinCommunityApi = false;
+    public bool $xReadAccess = false;
 
     public function mount(): void
     {
@@ -73,6 +75,7 @@ new class extends Component {
         }
 
         $this->linkedinCommunityApi = (bool) SocialManager::credentials('linkedin')['community_api'];
+        $this->xReadAccess = (bool) SocialManager::credentials('x')['read_access'];
     }
 
     public function saveBilling(): void
@@ -154,6 +157,10 @@ new class extends Component {
 
         if ($group === 'linkedin') {
             Setting::put('linkedin.community_api', $this->linkedinCommunityApi ? '1' : '0');
+        }
+
+        if ($group === 'x') {
+            Setting::put('x.read_access', $this->xReadAccess ? '1' : '0');
         }
 
         $this->dispatch("saved-{$group}");
@@ -295,6 +302,10 @@ new class extends Component {
                     <flux:checkbox wire:model="linkedinCommunityApi" label="LinkedIn approved my app for the Community Management API (enables reading posts and comments)" />
                 @endif
 
+                @if ($group === 'x')
+                    <flux:checkbox wire:model="xReadAccess" label="My X API plan includes reading (Basic or higher). Leave off on the Free plan, which can only post." />
+                @endif
+
                 <div class="rounded-lg bg-zinc-50 p-3 text-sm dark:bg-zinc-900">
                     Redirect / callback URL{{ count($platforms) > 1 ? 's' : '' }} to paste into the app:
                     @foreach ($platforms as $p)
@@ -304,6 +315,15 @@ new class extends Component {
                         <div class="mt-2">Also add this one, for <strong>“Continue with Google”</strong> on the login and sign-up pages (same OAuth client):</div>
                         <div><code class="select-all">{{ \App\Http\Controllers\GoogleLoginController::callbackUrl() }}</code></div>
                     @endif
+                    <div class="mt-3 grid gap-1 border-t border-zinc-200 pt-3 sm:grid-cols-[auto_1fr] sm:gap-x-3 dark:border-zinc-700">
+                        <span class="text-zinc-500">Website</span><code class="select-all">{{ rtrim(config('app.url'), '/') }}</code>
+                        <span class="text-zinc-500">Privacy policy</span><code class="select-all">{{ rtrim(config('app.url'), '/').route('privacy', absolute: false) }}</code>
+                        <span class="text-zinc-500">Terms of service</span><code class="select-all">{{ rtrim(config('app.url'), '/').route('terms', absolute: false) }}</code>
+                        @if ($group === 'meta')
+                            <span class="text-zinc-500">Data deletion instructions</span><code class="select-all">{{ rtrim(config('app.url'), '/').route('privacy', absolute: false) }}#data-deletion</code>
+                        @endif
+                        <span class="text-zinc-500">App domain</span><code class="select-all">{{ \Illuminate\Support\Str::after(parse_url(config('app.url'), PHP_URL_HOST), '.') ?: parse_url(config('app.url'), PHP_URL_HOST) }}</code>
+                    </div>
                 </div>
 
                 <div class="flex items-center gap-3">

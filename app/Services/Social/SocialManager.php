@@ -52,8 +52,11 @@ class SocialManager
     {
         $config = array_merge(config("services.{$group}", []), Setting::group($group));
 
-        if (array_key_exists('community_api', $config)) {
-            $config['community_api'] = filter_var($config['community_api'], FILTER_VALIDATE_BOOLEAN);
+        // Switches saved in Admin → Settings come back as "1"/"0" strings.
+        foreach (['community_api', 'read_access'] as $flag) {
+            if (array_key_exists($flag, $config)) {
+                $config[$flag] = filter_var($config[$flag], FILTER_VALIDATE_BOOLEAN);
+            }
         }
 
         return $config;

@@ -54,7 +54,7 @@
         We never post anything to your accounts unless you ask us to.
     </p>
 
-    <h2>3. YouTube API Services and Google user data</h2>
+    <h2 id="google">3. YouTube API Services and Google user data</h2>
     <p>
         {{ $app }} uses <strong>YouTube API Services</strong> to upload videos you choose, show your channel’s videos and statistics, read and reply to
         comments on your videos, and show trending videos. By connecting a YouTube account you agree to be bound by the
@@ -94,7 +94,7 @@
     </ul>
     <p>We may also disclose information if the law requires it, or to protect the rights and safety of our users and the Service.</p>
 
-    <h2>6. How long we keep information, and how to delete it</h2>
+    <h2 id="data-deletion">6. How long we keep information, and how to delete it</h2>
     <ul>
         <li>Content, statistics and comments from your connected accounts are refreshed automatically while the account is connected, so stored copies stay up to date.</li>
         <li><strong>Disconnecting an account</strong> immediately deletes that account’s access tokens and all content, statistics and comments we imported from it, and revokes our access where the platform supports it (including Google).</li>

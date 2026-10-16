@@ -30,7 +30,18 @@ class XDriver extends AbstractDriver
 
     private const CHUNK = 4 * 1024 * 1024;
 
-    protected array $features = [self::PUBLISH, self::CONTENT, self::COMMENTS, self::REPLY];
+    /**
+     * X's Free plan can post but not read timelines or search replies (those return 403), so reading
+     * is only switched on when the admin says their X plan includes it (Basic or higher).
+     */
+    public function __construct(array $config)
+    {
+        parent::__construct($config);
+
+        $this->features = ($config['read_access'] ?? false)
+            ? [self::PUBLISH, self::CONTENT, self::COMMENTS, self::REPLY]
+            : [self::PUBLISH];
+    }
 
     public function platform(): Platform
     {

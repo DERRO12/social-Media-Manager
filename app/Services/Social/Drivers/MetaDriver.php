@@ -41,12 +41,18 @@ abstract class MetaDriver extends AbstractDriver
 
     public function authorizationUrl(string $state, string $callbackUrl): string
     {
+        // "Facebook Login for Business" apps pick their permissions in a saved configuration (config_id);
+        // classic "Facebook Login" apps list them in the scope parameter.
+        $permissions = filled($this->config['config_id'] ?? null)
+            ? ['config_id' => $this->config['config_id']]
+            : ['scope' => implode(',', self::SCOPES)];
+
         return 'https://www.facebook.com/'.$this->config['graph_version'].'/dialog/oauth?'.http_build_query([
             'client_id' => $this->config['client_id'],
             'redirect_uri' => $callbackUrl,
             'state' => $state,
-            'scope' => implode(',', self::SCOPES),
             'response_type' => 'code',
+            ...$permissions,
         ]);
     }
 
