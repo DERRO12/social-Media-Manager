@@ -11,3 +11,4 @@ Artisan::command('inspire', function () {
 Schedule::command('posts:publish-due')->everyMinute()->withoutOverlapping();
 Schedule::command('social:sync')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('billing:maintain')->hourly()->withoutOverlapping();
+Schedule::command('media:cleanup')->daily()->withoutOverlapping();

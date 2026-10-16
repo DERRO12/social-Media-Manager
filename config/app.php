@@ -75,12 +75,11 @@ return [
     'trusted_proxies' => env('TRUSTED_PROXIES'),
 
     /*
-    | Largest video a client may upload, in MB. Cloudflare's free plan (and the tunnel) rejects request
-    | bodies over 100 MB, so keep this at 100 unless uploads bypass Cloudflare or you're on a paid plan.
-    | PHP (upload_max_filesize / post_max_size) and Nginx (client_max_body_size) must allow at least this much.
+    | Largest video a client may upload, in MB. Videos are sent in 50 MB pieces (Cloudflare's free plan rejects
+    | single requests over 100 MB), so this can be large; make sure the server has the disk space for it.
     */
 
-    'max_upload_mb' => (int) env('MAX_UPLOAD_MB', 100),
+    'max_upload_mb' => (int) env('MAX_UPLOAD_MB', 2048),
 
     /*
     |--------------------------------------------------------------------------

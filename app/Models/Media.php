@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 class Media extends Model
@@ -19,6 +20,25 @@ class Media extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function posts(): HasMany
+    {
+        return $this->hasMany(Post::class);
+    }
+
+    public function deleteWithFile(): void
+    {
+        Storage::disk($this->disk)->delete($this->path);
+        $this->delete();
+    }
+
+    /** "245 MB", "1.2 GB" */
+    public function humanSize(): string
+    {
+        return $this->size >= 1024 ** 3
+            ? round($this->size / 1024 ** 3, 1).' GB'
+            : max(1, round($this->size / 1024 ** 2)).' MB';
     }
 
     /** Absolute path on the local filesystem, used when uploading bytes to a platform. */

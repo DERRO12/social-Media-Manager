@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\ChunkedUploadController;
 use App\Http\Controllers\GoogleLoginController;
 use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\SocialAuthController;
@@ -32,6 +33,9 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
     Volt::route('content', 'content.index')->name('content');
     Volt::route('inbox', 'inbox.index')->name('inbox');
     Volt::route('trending', 'trending.index')->name('trending');
+
+    Route::post('uploads/chunk', [ChunkedUploadController::class, 'chunk'])->name('uploads.chunk');
+    Route::post('uploads/complete', [ChunkedUploadController::class, 'complete'])->name('uploads.complete');
 
     Route::get('accounts/connect/{platform}', [SocialAuthController::class, 'redirect'])->name('accounts.connect');
     Route::get('accounts/callback/{platform}', [SocialAuthController::class, 'callback'])->name('accounts.callback');

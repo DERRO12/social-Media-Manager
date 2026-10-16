@@ -3,14 +3,13 @@
 use App\Enums\Platform;
 use App\Enums\PostStatus;
 use Illuminate\Support\Carbon;
+use App\Http\Controllers\ChunkedUploadController;
 use Illuminate\Validation\Rule;
 use Livewire\Volt\Component;
-use Livewire\WithFileUploads;
 
 new class extends Component {
-    use WithFileUploads;
-
-    public $video;
+    /** The uploaded video (sent in pieces by the browser, see ChunkedUploadController). */
+    public ?int $mediaId = null;
     public string $title = '';
     public string $caption = '';
     /** @var int[] */
@@ -39,18 +38,16 @@ new class extends Component {
         $this->validate([
             'accountIds' => ['required', 'array', 'min:1'],
             'accountIds.*' => [Rule::exists('social_accounts', 'id')->where('user_id', $user->id)],
-            'video' => [$needsVideo ? 'required' : 'nullable', 'file', 'mimetypes:video/mp4,video/quicktime,video/webm', 'max:'.(config('app.max_upload_mb') * 1024)],
+            'mediaId' => [$needsVideo ? 'required' : 'nullable', Rule::exists('media', 'id')->where('user_id', $user->id)],
             'title' => ['nullable', 'string', 'max:100'],
-            'caption' => ['nullable', 'string', 'max:5000', Rule::requiredIf(! $this->video)],
+            'caption' => ['nullable', 'string', 'max:5000', Rule::requiredIf(! $this->mediaId)],
             'when' => ['required', Rule::in(['now', 'schedule', 'draft'])],
             'scheduledAt' => [Rule::requiredIf($this->when === 'schedule'), 'nullable', 'date'],
             'timezone' => ['required', 'timezone:all'],
         ], [
             'accountIds.required' => 'Choose at least one account to post to.',
-            'video.required' => 'YouTube, Instagram and TikTok need a video.',
-            'video.max' => 'This video is too large. The maximum is '.config('app.max_upload_mb').' MB.',
-            'video.uploaded' => 'The video failed to upload. It may be larger than '.config('app.max_upload_mb').' MB, or the connection dropped. Please try again.',
-            'video.mimetypes' => 'Please upload an MP4, MOV or WebM video.',
+            'mediaId.required' => 'YouTube, Instagram and TikTok need a video.',
+            'mediaId.exists' => 'That video is no longer available. Please upload it again.',
             'caption.required' => 'Write a caption or attach a video.',
         ]);
 
@@ -72,17 +69,7 @@ new class extends Component {
 
         $user->update(['timezone' => $this->timezone]);
 
-        $media = null;
-
-        if ($this->video) {
-            $media = $user->media()->create([
-                'disk' => 'public',
-                'path' => $this->video->store("media/{$user->id}", 'public'),
-                'original_name' => $this->video->getClientOriginalName(),
-                'mime_type' => $this->video->getMimeType(),
-                'size' => $this->video->getSize(),
-            ]);
-        }
+        $media = $this->mediaId ? $user->media()->find($this->mediaId) : null;
 
         $post = $user->posts()->create([
             'media_id' => $media?->id,
@@ -119,6 +106,20 @@ new class extends Component {
         $this->redirectRoute('posts', navigate: true);
     }
 
+    /** Called by the browser once every piece of the video has arrived and been joined. */
+    public function useMedia(int $id): void
+    {
+        $this->mediaId = auth()->user()->media()->findOrFail($id)->id;
+        $this->resetErrorBag('mediaId');
+    }
+
+    public function removeMedia(): void
+    {
+        // Remove it right away if no post uses it yet; otherwise the daily cleanup handles leftovers.
+        auth()->user()->media()->doesntHave('posts')->find($this->mediaId)?->deleteWithFile();
+        $this->mediaId = null;
+    }
+
     public function toggleAll(): void
     {
         $all = auth()->user()->socialAccounts()->pluck('id')->map(fn ($id) => (string) $id)->all();
@@ -138,6 +139,8 @@ new class extends Component {
             'hasX' => $selectedPlatforms->contains(Platform::X),
             'remainingPosts' => auth()->user()->remainingPosts(),
             'maxUploadMb' => config('app.max_upload_mb'),
+            'chunkMb' => ChunkedUploadController::CHUNK_MB,
+            'media' => $this->mediaId ? auth()->user()->media()->find($this->mediaId) : null,
         ];
     }
 }; ?>
@@ -188,45 +191,111 @@ new class extends Component {
 
             <flux:field>
                 <flux:label>Video</flux:label>
-                {{-- Uploaded via $wire.upload so oversized files are refused before sending, with progress and clear errors. --}}
-                <div x-data="{
-                        maxMb: {{ $maxUploadMb }},
-                        progress: null,
-                        problem: '',
-                        pick(event) {
-                            const file = event.target.files[0];
-                            this.problem = '';
-                            if (! file) return;
-                            const sizeMb = file.size / 1024 / 1024;
-                            if (sizeMb > this.maxMb) {
-                                this.problem = `This video is ${Math.round(sizeMb)} MB. The maximum is ${this.maxMb} MB. Please compress it or trim it, then try again.`;
-                                event.target.value = '';
-                                return;
-                            }
-                            this.progress = 0;
-                            $wire.upload('video', file,
-                                () => { this.progress = null },
-                                () => { this.progress = null; event.target.value = ''; this.problem = 'The upload did not finish. Check your internet connection and try again.' },
-                                (e) => { this.progress = e.detail.progress },
-                            );
-                        },
-                    }">
-                    <input type="file" x-on:change="pick($event)" accept="video/mp4,video/quicktime,video/webm"
-                        class="block w-full text-sm file:me-4 file:rounded-md file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-white dark:file:bg-zinc-200 dark:file:text-zinc-900" />
-
-                    <div x-show="progress !== null" x-cloak class="mt-2">
-                        <div class="flex justify-between text-xs text-zinc-500"><span>Uploading…</span><span x-text="progress + '%'"></span></div>
-                        <div class="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                            <div class="h-full rounded-full bg-zinc-800 transition-all dark:bg-zinc-200" :style="`width: ${progress}%`"></div>
+                @if ($media)
+                    <div class="flex flex-col gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                        <video src="{{ $media->url() }}" controls preload="metadata" class="max-h-80 rounded-lg bg-black"></video>
+                        <div class="flex items-center justify-between gap-3 text-sm">
+                            <span class="truncate"><flux:icon name="check-circle" variant="mini" class="inline text-green-600" /> {{ $media->original_name }} · {{ $media->humanSize() }}</span>
+                            <flux:button size="sm" variant="ghost" icon="x-mark" wire:click="removeMedia">Remove</flux:button>
                         </div>
                     </div>
-                    <p x-show="problem" x-text="problem" x-cloak class="mt-2 text-sm font-medium text-red-600 dark:text-red-400"></p>
-                </div>
-                @if ($video && ! $errors->has('video'))
-                    <video src="{{ $video->temporaryUrl() }}" controls class="mt-2 max-h-80 rounded-lg"></video>
+                @else
+                    {{-- Big videos are sent in pieces (Cloudflare refuses single requests over 100 MB); see ChunkedUploadController. --}}
+                    <div x-data="{
+                            maxMb: {{ $maxUploadMb }},
+                            chunkBytes: {{ $chunkMb }} * 1024 * 1024,
+                            progress: null,
+                            problem: '',
+                            mb(n) { return n >= 1024 ? (n / 1024).toFixed(1) + ' GB' : Math.max(1, Math.round(n)) + ' MB' },
+                            send(url, form, onProgress) {
+                                return new Promise((resolve, reject) => {
+                                    const xhr = new XMLHttpRequest();
+                                    xhr.open('POST', url);
+                                    xhr.setRequestHeader('X-CSRF-TOKEN', '{{ csrf_token() }}');
+                                    xhr.setRequestHeader('Accept', 'application/json');
+                                    if (onProgress) xhr.upload.onprogress = (e) => onProgress(e.loaded);
+                                    xhr.onload = () => {
+                                        let body = {};
+                                        try { body = JSON.parse(xhr.responseText) } catch (e) {}
+                                        xhr.status >= 200 && xhr.status < 300 ? resolve(body) : reject({ status: xhr.status, message: body.message });
+                                    };
+                                    xhr.onerror = () => reject({ status: 0 });
+                                    xhr.send(form);
+                                });
+                            },
+                            async sendWithRetry(url, form, onProgress) {
+                                for (let attempt = 1; ; attempt++) {
+                                    try { return await this.send(url, form, onProgress) }
+                                    catch (e) {
+                                        // Retry network blips and server hiccups, not validation errors.
+                                        if (attempt >= 3 || (e.status >= 400 && e.status < 500)) throw e;
+                                        await new Promise(r => setTimeout(r, attempt * 2000));
+                                    }
+                                }
+                            },
+                            async pick(event) {
+                                const file = event.target.files[0];
+                                this.problem = '';
+                                if (! file) return;
+                                const sizeMb = file.size / 1024 / 1024;
+                                if (sizeMb > this.maxMb) {
+                                    this.problem = `This video is ${this.mb(sizeMb)}. The maximum is ${this.mb(this.maxMb)}. Please compress it or trim it, then try again.`;
+                                    event.target.value = '';
+                                    return;
+                                }
+
+                                const id = crypto.randomUUID();
+                                const total = Math.max(1, Math.ceil(file.size / this.chunkBytes));
+                                this.progress = 0;
+
+                                try {
+                                    for (let i = 0; i < total; i++) {
+                                        const form = new FormData();
+                                        form.append('upload_id', id);
+                                        form.append('index', i);
+                                        form.append('total', total);
+                                        form.append('chunk', file.slice(i * this.chunkBytes, (i + 1) * this.chunkBytes), 'chunk');
+                                        await this.sendWithRetry('{{ route('uploads.chunk') }}', form,
+                                            (loaded) => { this.progress = Math.min(99, Math.floor((i * this.chunkBytes + loaded) / file.size * 100)) });
+                                    }
+
+                                    const done = new FormData();
+                                    done.append('upload_id', id);
+                                    done.append('total', total);
+                                    done.append('filename', file.name);
+                                    done.append('size', file.size);
+                                    const result = await this.sendWithRetry('{{ route('uploads.complete') }}', done);
+                                    if (! result.id) throw { message: 'The upload could not be saved. Please reload the page and try again.' };
+
+                                    this.progress = 100;
+                                    await $wire.useMedia(result.id);
+                                } catch (e) {
+                                    event.target.value = '';
+                                    this.problem = e.message || 'The upload did not finish. Check your internet connection and try again.';
+                                } finally {
+                                    this.progress = null;
+                                }
+                            },
+                        }">
+                        <input type="file" x-on:change="pick($event)" x-bind:disabled="progress !== null" accept="video/mp4,video/quicktime,video/webm"
+                            class="block w-full text-sm file:me-4 file:rounded-md file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-white disabled:opacity-50 dark:file:bg-zinc-200 dark:file:text-zinc-900" />
+
+                        <div x-show="progress !== null" x-cloak class="mt-2">
+                            <div class="flex justify-between text-xs text-zinc-500">
+                                <span>Uploading… keep this page open</span><span x-text="progress + '%'"></span>
+                            </div>
+                            <div class="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                                <div class="h-full rounded-full bg-zinc-800 transition-all dark:bg-zinc-200" :style="`width: ${progress}%`"></div>
+                            </div>
+                        </div>
+                        <p x-show="problem" x-text="problem" x-cloak class="mt-2 text-sm font-medium text-red-600 dark:text-red-400"></p>
+                    </div>
                 @endif
-                <flux:description>MP4, MOV or WebM, up to {{ $maxUploadMb }} MB. Vertical 9:16 works best for TikTok, Reels and Shorts.</flux:description>
-                <flux:error name="video" />
+                <flux:description>
+                    MP4, MOV or WebM, up to {{ $maxUploadMb >= 1024 ? round($maxUploadMb / 1024, 1).' GB' : $maxUploadMb.' MB' }}.
+                    Vertical 9:16 works best for TikTok, Reels and Shorts.
+                </flux:description>
+                <flux:error name="mediaId" />
             </flux:field>
 
             <flux:input wire:model="title" label="Title" description="Used for YouTube and LinkedIn video titles." maxlength="100" />
