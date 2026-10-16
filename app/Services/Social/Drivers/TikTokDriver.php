@@ -100,13 +100,16 @@ class TikTokDriver extends AbstractDriver
         $chunkSize = $size <= 64 * 1024 * 1024 ? $size : self::CHUNK;
         $chunks = max(1, intdiv($size, $chunkSize));
 
+        // Every choice below was made explicitly by the creator on the posting screen (TikTok Direct Post rules).
         $init = $this->ok($api->post('/post/publish/video/init/', [
             'post_info' => [
                 'title' => mb_substr($target->effectiveCaption(), 0, 2200),
                 'privacy_level' => $target->option('privacy', $this->config['default_privacy']),
-                'disable_comment' => false,
-                'disable_duet' => false,
-                'disable_stitch' => false,
+                'disable_comment' => ! $target->option('allow_comments', false),
+                'disable_duet' => ! $target->option('allow_duet', false),
+                'disable_stitch' => ! $target->option('allow_stitch', false),
+                'brand_organic_toggle' => (bool) $target->option('your_brand', false),
+                'brand_content_toggle' => (bool) $target->option('branded_content', false),
             ],
             'source_info' => [
                 'source' => 'FILE_UPLOAD',
@@ -147,6 +150,31 @@ class TikTokDriver extends AbstractDriver
 
         // Still processing; TikTok will finish on its side.
         return new PublishResult($init['publish_id']);
+    }
+
+    /**
+     * What this creator may post right now: their nickname, the privacy options TikTok allows them,
+     * whether they turned off comments/duet/stitch, and the longest video they can post.
+     * TikTok requires calling this every time the posting screen is shown.
+     *
+     * @return array{nickname: string, username: ?string, avatar_url: ?string, privacy_options: string[],
+     *               comment_disabled: bool, duet_disabled: bool, stitch_disabled: bool, max_duration_sec: ?int}
+     */
+    public function creatorInfo(SocialAccount $account): array
+    {
+        $data = $this->ok($this->api($account)->withBody('{}', 'application/json')->post('/post/publish/creator_info/query/'),
+            'loading TikTok account settings')->json('data');
+
+        return [
+            'nickname' => $data['creator_nickname'] ?? $account->name,
+            'username' => $data['creator_username'] ?? $account->username,
+            'avatar_url' => $data['creator_avatar_url'] ?? $account->avatar_url,
+            'privacy_options' => array_values($data['privacy_level_options'] ?? ['SELF_ONLY']),
+            'comment_disabled' => (bool) ($data['comment_disabled'] ?? false),
+            'duet_disabled' => (bool) ($data['duet_disabled'] ?? false),
+            'stitch_disabled' => (bool) ($data['stitch_disabled'] ?? false),
+            'max_duration_sec' => isset($data['max_video_post_duration_sec']) ? (int) $data['max_video_post_duration_sec'] : null,
+        ];
     }
 
     public function fetchContent(SocialAccount $account, int $limit = 25): array

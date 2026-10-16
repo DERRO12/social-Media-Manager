@@ -18,7 +18,26 @@ new class extends Component {
     public string $scheduledAt = '';
     public string $timezone = 'UTC';
     public string $youtubePrivacy = 'public';
-    public string $tiktokPrivacy = 'SELF_ONLY';
+    /** Length of the uploaded video in seconds, read in the browser (for TikTok's duration limit). */
+    public ?int $videoSeconds = null;
+    /**
+     * TikTok settings per selected TikTok account. TikTok's Direct Post rules require the creator to choose
+     * these themselves: nothing is pre-selected and interactions are off until switched on.
+     * @var array<int, array{privacy: string, allow_comments: bool, allow_duet: bool, allow_stitch: bool, disclose: bool, your_brand: bool, branded_content: bool}>
+     */
+    public array $tiktok = [];
+
+    private const TIKTOK_DEFAULTS = [
+        'privacy' => '', 'allow_comments' => false, 'allow_duet' => false, 'allow_stitch' => false,
+        'disclose' => false, 'your_brand' => false, 'branded_content' => false,
+    ];
+
+    public const TIKTOK_PRIVACY_LABELS = [
+        'PUBLIC_TO_EVERYONE' => 'Everyone',
+        'MUTUAL_FOLLOW_FRIENDS' => 'Friends (followers you follow back)',
+        'FOLLOWER_OF_CREATOR' => 'Followers',
+        'SELF_ONLY' => 'Only me',
+    ];
 
     /** Platforms that cannot post without a video. */
     private const VIDEO_ONLY = [Platform::YouTube, Platform::Instagram, Platform::TikTok];
@@ -26,7 +45,42 @@ new class extends Component {
     public function mount(): void
     {
         $this->timezone = auth()->user()->timezone ?: 'UTC';
-        $this->tiktokPrivacy = config('services.tiktok.default_privacy');
+    }
+
+    /**
+     * TikTok creator settings, loaded when the posting screen shows a TikTok account (as TikTok requires),
+     * kept for 2 minutes so typing a caption doesn't call TikTok on every keystroke.
+     *
+     * @return array<int, array> account id => creatorInfo() result, or ['error' => message]
+     */
+    private function tiktokCreators($accounts): array
+    {
+        return $accounts->where('platform', Platform::TikTok)->mapWithKeys(fn ($account) => [
+            $account->id => cache()->remember("tiktok:creator:{$account->id}", now()->addMinutes(2), function () use ($account) {
+                try {
+                    return $account->driver()->creatorInfo($account);
+                } catch (\Throwable $e) {
+                    report($e);
+
+                    return ['error' => $e->getMessage()];
+                }
+            }),
+        ])->all();
+    }
+
+    /** @return string|null An error message if the TikTok choices break TikTok's rules. */
+    private function tiktokProblem(int $accountId, array $info): ?string
+    {
+        $choice = $this->tiktok[$accountId] ?? self::TIKTOK_DEFAULTS;
+
+        return match (true) {
+            isset($info['error']) => "We couldn't load your TikTok account settings. Reconnect TikTok and try again.",
+            ! in_array($choice['privacy'], $info['privacy_options'], true) => 'Choose who can see this TikTok post.',
+            $choice['disclose'] && ! $choice['your_brand'] && ! $choice['branded_content'] => 'Select “Your brand” and/or “Branded content”, or turn off the disclosure.',
+            $choice['disclose'] && $choice['branded_content'] && $choice['privacy'] === 'SELF_ONLY' => 'Branded content can’t be private. Choose another visibility.',
+            $info['max_duration_sec'] && $this->videoSeconds && $this->videoSeconds > $info['max_duration_sec'] => "This video is {$this->videoSeconds} seconds long. Your TikTok account can post videos up to {$info['max_duration_sec']} seconds.",
+            default => null,
+        };
     }
 
     public function save(): void
@@ -61,6 +115,15 @@ new class extends Component {
             return;
         }
 
+        $tiktokCreators = $this->tiktokCreators($selected);
+        foreach ($tiktokCreators as $accountId => $info) {
+            if ($problem = $this->tiktokProblem($accountId, $info)) {
+                $this->addError("tiktok.{$accountId}", $problem);
+
+                return;
+            }
+        }
+
         if ($this->when !== 'draft' && $user->remainingPosts() === 0) {
             $this->addError('when', 'You have used all the posts your plan includes this month. Save it as a draft, or upgrade your plan.');
 
@@ -87,7 +150,7 @@ new class extends Component {
                 'social_account_id' => $account->id,
                 'options' => match ($account->platform) {
                     Platform::YouTube => ['privacy' => $this->youtubePrivacy],
-                    Platform::TikTok => ['privacy' => $this->tiktokPrivacy],
+                    Platform::TikTok => $this->tiktokOptions($account->id, $tiktokCreators[$account->id]),
                     default => [],
                 },
             ]);
@@ -106,10 +169,26 @@ new class extends Component {
         $this->redirectRoute('posts', navigate: true);
     }
 
+    /** What gets sent to TikTok; switches the creator turned off in TikTok are always sent as off. */
+    private function tiktokOptions(int $accountId, array $info): array
+    {
+        $c = $this->tiktok[$accountId];
+
+        return [
+            'privacy' => $c['privacy'],
+            'allow_comments' => $c['allow_comments'] && ! $info['comment_disabled'],
+            'allow_duet' => $c['allow_duet'] && ! $info['duet_disabled'],
+            'allow_stitch' => $c['allow_stitch'] && ! $info['stitch_disabled'],
+            'your_brand' => $c['disclose'] && $c['your_brand'],
+            'branded_content' => $c['disclose'] && $c['branded_content'],
+        ];
+    }
+
     /** Called by the browser once every piece of the video has arrived and been joined. */
-    public function useMedia(int $id): void
+    public function useMedia(int $id, ?int $seconds = null): void
     {
         $this->mediaId = auth()->user()->media()->findOrFail($id)->id;
+        $this->videoSeconds = $seconds && $seconds > 0 ? $seconds : null;
         $this->resetErrorBag('mediaId');
     }
 
@@ -118,6 +197,7 @@ new class extends Component {
         // Remove it right away if no post uses it yet; otherwise the daily cleanup handles leftovers.
         auth()->user()->media()->doesntHave('posts')->find($this->mediaId)?->deleteWithFile();
         $this->mediaId = null;
+        $this->videoSeconds = null;
     }
 
     public function toggleAll(): void
@@ -130,10 +210,21 @@ new class extends Component {
     public function with(): array
     {
         $accounts = auth()->user()->socialAccounts()->orderBy('platform')->get();
-        $selectedPlatforms = $accounts->whereIn('id', $this->accountIds)->pluck('platform')->unique();
+        $selected = $accounts->whereIn('id', $this->accountIds);
+        $selectedPlatforms = $selected->pluck('platform')->unique();
+
+        $tiktokAccounts = $selected->where('platform', Platform::TikTok)->values();
+        foreach ($tiktokAccounts as $account) {
+            $this->tiktok[$account->id] ??= self::TIKTOK_DEFAULTS;
+        }
 
         return [
             'accounts' => $accounts,
+            'tiktokAccounts' => $tiktokAccounts,
+            'tiktokPrivacyLabels' => self::TIKTOK_PRIVACY_LABELS,
+            'tiktokCreators' => $this->tiktokCreators($tiktokAccounts),
+            'anyBrandedContent' => collect($this->tiktok)->only($tiktokAccounts->pluck('id')->all())
+                ->contains(fn ($c) => $c['disclose'] && $c['branded_content']),
             'hasYouTube' => $selectedPlatforms->contains(Platform::YouTube),
             'hasTikTok' => $selectedPlatforms->contains(Platform::TikTok),
             'hasX' => $selectedPlatforms->contains(Platform::X),
@@ -207,6 +298,19 @@ new class extends Component {
                             progress: null,
                             problem: '',
                             mb(n) { return n >= 1024 ? (n / 1024).toFixed(1) + ' GB' : Math.max(1, Math.round(n)) + ' MB' },
+                            duration(file) {
+                                // Video length in seconds, read locally (no upload needed); null if the browser can't tell.
+                                return new Promise((resolve) => {
+                                    const v = document.createElement('video');
+                                    const url = URL.createObjectURL(file);
+                                    const done = (s) => { URL.revokeObjectURL(url); resolve(s) };
+                                    v.preload = 'metadata';
+                                    v.onloadedmetadata = () => done(isFinite(v.duration) ? Math.round(v.duration) : null);
+                                    v.onerror = () => done(null);
+                                    setTimeout(() => done(null), 8000);
+                                    v.src = url;
+                                });
+                            },
                             send(url, form, onProgress) {
                                 return new Promise((resolve, reject) => {
                                     const xhr = new XMLHttpRequest();
@@ -244,6 +348,7 @@ new class extends Component {
                                     return;
                                 }
 
+                                const seconds = await this.duration(file);
                                 const id = crypto.randomUUID();
                                 const total = Math.max(1, Math.ceil(file.size / this.chunkBytes));
                                 this.progress = 0;
@@ -268,7 +373,7 @@ new class extends Component {
                                     if (! result.id) throw { message: 'The upload could not be saved. Please reload the page and try again.' };
 
                                     this.progress = 100;
-                                    await $wire.useMedia(result.id);
+                                    await $wire.useMedia(result.id, seconds);
                                 } catch (e) {
                                     event.target.value = '';
                                     this.problem = e.message || 'The upload did not finish. Check your internet connection and try again.';
@@ -312,25 +417,82 @@ new class extends Component {
                 <flux:error name="caption" />
             </flux:field>
 
-            @if ($hasYouTube || $hasTikTok)
+            @if ($hasYouTube)
                 <div class="grid gap-4 sm:grid-cols-2">
-                    @if ($hasYouTube)
-                        <flux:select wire:model="youtubePrivacy" label="YouTube visibility">
-                            <option value="public">Public</option>
-                            <option value="unlisted">Unlisted</option>
-                            <option value="private">Private</option>
-                        </flux:select>
-                    @endif
-                    @if ($hasTikTok)
-                        <flux:select wire:model="tiktokPrivacy" label="TikTok visibility" description="Unaudited TikTok apps can only post as 'Only me'.">
-                            <option value="PUBLIC_TO_EVERYONE">Everyone</option>
-                            <option value="MUTUAL_FOLLOW_FRIENDS">Friends</option>
-                            <option value="FOLLOWER_OF_CREATOR">Followers</option>
-                            <option value="SELF_ONLY">Only me</option>
-                        </flux:select>
-                    @endif
+                    <flux:select wire:model="youtubePrivacy" label="YouTube visibility">
+                        <option value="public">Public</option>
+                        <option value="unlisted">Unlisted</option>
+                        <option value="private">Private</option>
+                    </flux:select>
                 </div>
             @endif
+
+            {{-- TikTok Direct Post rules: show the creator, let them choose everything, nothing pre-selected. --}}
+            @foreach ($tiktokAccounts as $account)
+                @php($info = $tiktokCreators[$account->id] ?? [])
+                @php($choice = $tiktok[$account->id])
+                <div wire:key="tiktok-{{ $account->id }}" class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                    @if (isset($info['error']))
+                        <flux:callout variant="danger" icon="exclamation-triangle" heading="We couldn't load your TikTok account settings.">
+                            <flux:callout.text>Reconnect TikTok on the Connected accounts page, then try again.</flux:callout.text>
+                        </flux:callout>
+                    @else
+                        <div class="flex items-center gap-3">
+                            <x-avatar :src="$info['avatar_url']" :name="$info['nickname']" />
+                            <div class="text-sm">
+                                <div class="font-medium">Posting to TikTok as {{ $info['nickname'] }}</div>
+                                @if ($info['username'])
+                                    <div class="text-zinc-500">{{ '@'.ltrim($info['username'], '@') }}</div>
+                                @endif
+                            </div>
+                            <x-platform-badge :platform="$account->platform" class="ms-auto" />
+                        </div>
+
+                        <flux:select wire:model.live="tiktok.{{ $account->id }}.privacy" label="Who can view this video">
+                            <option value="" disabled>Choose who can see it…</option>
+                            @foreach ($info['privacy_options'] as $option)
+                                <option value="{{ $option }}" @disabled($option === 'SELF_ONLY' && $choice['disclose'] && $choice['branded_content'])>
+                                    {{ $tiktokPrivacyLabels[$option] ?? $option }}{{ $option === 'SELF_ONLY' && $choice['disclose'] && $choice['branded_content'] ? ' (not allowed for branded content)' : '' }}
+                                </option>
+                            @endforeach
+                        </flux:select>
+
+                        <div>
+                            <div class="mb-2 text-sm font-medium">Allow users to</div>
+                            <div class="flex flex-wrap gap-x-6 gap-y-2">
+                                @foreach (['allow_comments' => ['Comment', 'comment_disabled'], 'allow_duet' => ['Duet', 'duet_disabled'], 'allow_stitch' => ['Stitch', 'stitch_disabled']] as $key => [$label, $disabledKey])
+                                    <flux:checkbox wire:model="tiktok.{{ $account->id }}.{{ $key }}" :label="$label" :disabled="$info[$disabledKey]"
+                                        :description="$info[$disabledKey] ? 'Turned off in your TikTok settings' : null" />
+                                @endforeach
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
+                            <flux:switch wire:model.live="tiktok.{{ $account->id }}.disclose" label="Disclose video content"
+                                description="Turn on if this video promotes yourself, a brand, product or service." />
+                            @if ($choice['disclose'])
+                                <flux:checkbox wire:model.live="tiktok.{{ $account->id }}.your_brand" label="Your brand"
+                                    description="You are promoting yourself or your own business. The video will be labelled “Promotional content”." />
+                                <flux:checkbox wire:model.live="tiktok.{{ $account->id }}.branded_content" label="Branded content"
+                                    description="You are promoting another brand or a third party. The video will be labelled “Paid partnership”." />
+                                @if (! $choice['your_brand'] && ! $choice['branded_content'])
+                                    <flux:text class="text-sm text-amber-600">Select at least one option to disclose this video.</flux:text>
+                                @endif
+                            @endif
+                        </div>
+
+                        @if ($info['max_duration_sec'])
+                            <flux:text class="text-xs">
+                                Your TikTok account can post videos up to {{ $info['max_duration_sec'] >= 60 ? round($info['max_duration_sec'] / 60, 1).' minutes' : $info['max_duration_sec'].' seconds' }}.
+                                @if ($videoSeconds && $videoSeconds > $info['max_duration_sec'])
+                                    <span class="font-medium text-red-600">This video is too long for TikTok.</span>
+                                @endif
+                            </flux:text>
+                        @endif
+                    @endif
+                    <flux:error name="tiktok.{{ $account->id }}" />
+                </div>
+            @endforeach
 
             <flux:radio.group wire:model.live="when" label="When" variant="segmented">
                 <flux:radio value="now" label="Post now" />
@@ -343,8 +505,17 @@ new class extends Component {
                 <flux:input type="datetime-local" wire:model="scheduledAt" label="Publish at" :description="'Your timezone: '.$timezone" />
             @endif
 
+            @if ($hasTikTok)
+                <flux:text class="text-xs">
+                    By posting, you agree to TikTok’s
+                    <a href="https://www.tiktok.com/legal/page/global/music-usage-confirmation/en" target="_blank" rel="noopener" class="underline">Music Usage Confirmation</a>@if ($anyBrandedContent)
+                        and <a href="https://www.tiktok.com/legal/page/global/bc-policy/en" target="_blank" rel="noopener" class="underline">Branded Content Policy</a>@endif.
+                    After posting, it may take a few minutes for the video to appear on your TikTok profile.
+                </flux:text>
+            @endif
+
             <div class="flex justify-end">
-                <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="save,video">
+                <flux:button type="submit" variant="primary" wire:loading.attr="disabled" wire:target="save">
                     {{ ['now' => 'Publish now', 'schedule' => 'Schedule post', 'draft' => 'Save draft'][$when] }}
                 </flux:button>
             </div>
