@@ -300,6 +300,10 @@ new class extends Component {
                     @foreach ($platforms as $p)
                         <div><code class="select-all">{{ \App\Services\Social\SocialManager::callbackUrl(\App\Enums\Platform::from($p)) }}</code></div>
                     @endforeach
+                    @if ($group === 'youtube')
+                        <div class="mt-2">Also add this one, for <strong>“Continue with Google”</strong> on the login and sign-up pages (same OAuth client):</div>
+                        <div><code class="select-all">{{ \App\Http\Controllers\GoogleLoginController::callbackUrl() }}</code></div>
+                    @endif
                 </div>
 
                 <div class="flex items-center gap-3">

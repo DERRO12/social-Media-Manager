@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\GoogleLoginController;
 use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\StripeWebhookController;
@@ -10,6 +11,12 @@ use Livewire\Volt\Volt;
 Route::get('/', function () {
     return view('welcome');
 })->name('home');
+
+// "Continue with Google" sign-in / sign-up.
+Route::middleware('guest')->group(function () {
+    Route::get('auth/google', [GoogleLoginController::class, 'redirect'])->name('google.redirect');
+    Route::get('auth/google/callback', [GoogleLoginController::class, 'callback'])->name('google.callback');
+});
 
 // Public legal pages (required by Google, Meta and TikTok app reviews).
 Route::view('privacy', 'legal.privacy')->name('privacy');
