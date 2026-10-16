@@ -156,6 +156,14 @@ class YouTubeDriver extends AbstractDriver
         ]), 'token refresh')->json();
     }
 
+    /** Revoking the refresh token ends the whole grant at Google (also listed in the user's Google security settings). */
+    public function revoke(SocialAccount $account): void
+    {
+        $token = $account->refresh_token ?: $account->access_token;
+
+        $this->ok(Http::asForm()->post('https://oauth2.googleapis.com/revoke', ['token' => $token]), 'revoking access');
+    }
+
     public function publish(PostTarget $target): PublishResult
     {
         $account = $target->account;

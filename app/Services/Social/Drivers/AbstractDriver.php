@@ -42,6 +42,9 @@ abstract class AbstractDriver implements PlatformDriver
         throw PlatformException::unsupported($this->platform()->label(), 'replying to comments');
     }
 
+    /** Platforms without a revoke endpoint: deleting the stored token is all we can do. */
+    public function revoke(SocialAccount $account): void {}
+
     /** A valid access token for the account, refreshing it first if it has expired. */
     protected function token(SocialAccount $account): string
     {

@@ -85,6 +85,12 @@ new #[Layout('components.layouts.auth')] class extends Component {
                 {{ __('Create account') }}
             </flux:button>
         </div>
+
+        <p class="text-center text-xs text-zinc-500 dark:text-zinc-400">
+            By creating an account you agree to our
+            <a href="{{ route('terms') }}" class="underline" target="_blank">Terms of Service</a> and
+            <a href="{{ route('privacy') }}" class="underline" target="_blank">Privacy Policy</a>.
+        </p>
     </form>
 
     <div class="space-x-1 text-center text-sm text-zinc-600 dark:text-zinc-400">

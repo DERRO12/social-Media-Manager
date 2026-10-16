@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class User extends Authenticatable // implements MustVerifyEmail
@@ -75,6 +76,16 @@ class User extends Authenticatable // implements MustVerifyEmail
             if (! $user->isAdmin()) {
                 app(SubscriptionManager::class)->startDefaultTrial($user);
             }
+        });
+
+        // Deleting an account removes everything: platform access is revoked, then uploaded video files are
+        // deleted (the database rows go via cascading foreign keys, which don't remove files on disk).
+        static::deleting(function (User $user) {
+            $user->socialAccounts->each(fn (SocialAccount $account) => $account->disconnect());
+
+            $user->media->groupBy('disk')->each(function ($files, $disk) {
+                Storage::disk($disk)->delete($files->pluck('path')->all());
+            });
         });
     }
 

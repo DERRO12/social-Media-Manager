@@ -15,6 +15,10 @@
                 <div class="flex flex-col gap-6">
                     {{ $slot }}
                 </div>
+                <div class="mt-6 flex justify-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
+                    <a href="{{ route('privacy') }}" class="hover:underline">Privacy</a>
+                    <a href="{{ route('terms') }}" class="hover:underline">Terms</a>
+                </div>
             </div>
         </div>
         @fluxScripts

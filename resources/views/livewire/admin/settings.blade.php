@@ -43,6 +43,10 @@ new class extends Component {
     public $trialPlanId = null;
     public string $supportContact = '';
 
+    public string $legalOwner = '';
+    public string $legalEmail = '';
+    public string $legalCountry = '';
+
     public string $stripeSecret = '';
     public string $stripeWebhookSecret = '';
 
@@ -55,6 +59,9 @@ new class extends Component {
         $this->trialDays = (int) Setting::get('billing.trial_days', 14);
         $this->trialPlanId = Setting::get('billing.trial_plan_id');
         $this->supportContact = (string) Setting::get('billing.support_contact', '');
+        $this->legalOwner = (string) Setting::get('legal.owner', '');
+        $this->legalEmail = (string) Setting::get('legal.email', '');
+        $this->legalCountry = (string) Setting::get('legal.country', '');
 
         foreach (self::GROUPS as $group => [, , , $fields]) {
             $current = SocialManager::credentials($group);
@@ -81,6 +88,22 @@ new class extends Component {
         Setting::put('billing.support_contact', $this->supportContact);
 
         $this->dispatch('saved-billing');
+    }
+
+    public function saveLegal(): void
+    {
+        $this->validate([
+            'legalOwner' => ['nullable', 'string', 'max:150'],
+            'legalEmail' => ['nullable', 'email', 'max:150'],
+            'legalCountry' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        Setting::put('legal.owner', $this->legalOwner);
+        Setting::put('legal.email', $this->legalEmail);
+        Setting::put('legal.country', $this->legalCountry);
+        Setting::put('legal.updated', now()->format('F j, Y'));
+
+        $this->dispatch('saved-legal');
     }
 
     public function saveStripe(): void
@@ -179,6 +202,30 @@ new class extends Component {
         <div class="flex items-center gap-3">
             <flux:button type="submit" variant="primary">Save</flux:button>
             <x-action-message on="saved-billing">Saved.</x-action-message>
+        </div>
+    </form>
+
+    {{-- Legal pages --}}
+    <form wire:submit="saveLegal" class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <flux:heading size="lg">Privacy Policy &amp; Terms</flux:heading>
+            <div class="flex gap-3 text-sm">
+                <flux:link :href="route('privacy')" target="_blank">View Privacy Policy</flux:link>
+                <flux:link :href="route('terms')" target="_blank">View Terms</flux:link>
+            </div>
+        </div>
+        <flux:text class="text-sm">
+            Shown on your public Privacy Policy and Terms pages, which Google, Meta and TikTok require before approving your app.
+            Use the links above as the “Privacy policy URL” and “Terms of service URL” in each platform’s app settings.
+        </flux:text>
+        <div class="grid gap-4 sm:grid-cols-3">
+            <flux:input wire:model="legalOwner" label="Business or owner name" :placeholder="config('app.name')" />
+            <flux:input wire:model="legalEmail" type="email" label="Contact email" placeholder="privacy@yourdomain.com" />
+            <flux:input wire:model="legalCountry" label="Country" placeholder="Uganda" />
+        </div>
+        <div class="flex items-center gap-3">
+            <flux:button type="submit" variant="primary">Save</flux:button>
+            <x-action-message on="saved-legal">Saved. The “last updated” date was set to today.</x-action-message>
         </div>
     </form>
 

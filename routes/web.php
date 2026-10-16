@@ -11,6 +11,10 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+// Public legal pages (required by Google, Meta and TikTok app reviews).
+Route::view('privacy', 'legal.privacy')->name('privacy');
+Route::view('terms', 'legal.terms')->name('terms');
+
 // Client workspace: every page only shows the signed-in client's own data,
 // and needs a running trial or an active plan ("has-access").
 Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(function () {

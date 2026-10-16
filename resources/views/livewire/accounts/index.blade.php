@@ -17,7 +17,7 @@ new class extends Component {
     public function disconnect(int $id): void
     {
         $account = auth()->user()->socialAccounts()->findOrFail($id);
-        $account->delete();
+        $account->disconnect();
 
         session()->flash('status', "Disconnected {$account->name}.");
         $this->redirectRoute('accounts', navigate: true);
@@ -153,7 +153,7 @@ new class extends Component {
                                         @endif
                                         <flux:button size="sm" icon="arrow-path" wire:click="sync({{ $account->id }})">Sync</flux:button>
                                         <flux:button size="sm" variant="danger" wire:click="disconnect({{ $account->id }})"
-                                            wire:confirm="Disconnect {{ $account->name }}? Its imported content and comments will be removed from this app (nothing is deleted on {{ $account->platform->label() }}).">
+                                            wire:confirm="Disconnect {{ $account->name }}? This app's access to it will be revoked and its imported content and comments removed from this app. Nothing is deleted on {{ $account->platform->label() }}.">
                                             Disconnect
                                         </flux:button>
                                     </div>

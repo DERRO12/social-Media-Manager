@@ -51,4 +51,7 @@ interface PlatformDriver
     public function fetchComments(SocialAccount $account, ContentItem $item): array;
 
     public function reply(SocialAccount $account, Comment $comment, string $message): CommentData;
+
+    /** Ask the platform to invalidate our access token (best effort; called when an account is disconnected). */
+    public function revoke(SocialAccount $account): void;
 }
