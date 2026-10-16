@@ -39,7 +39,7 @@ new class extends Component {
         $this->validate([
             'accountIds' => ['required', 'array', 'min:1'],
             'accountIds.*' => [Rule::exists('social_accounts', 'id')->where('user_id', $user->id)],
-            'video' => [$needsVideo ? 'required' : 'nullable', 'file', 'mimetypes:video/mp4,video/quicktime,video/webm', 'max:1048576'],
+            'video' => [$needsVideo ? 'required' : 'nullable', 'file', 'mimetypes:video/mp4,video/quicktime,video/webm', 'max:'.(config('app.max_upload_mb') * 1024)],
             'title' => ['nullable', 'string', 'max:100'],
             'caption' => ['nullable', 'string', 'max:5000', Rule::requiredIf(! $this->video)],
             'when' => ['required', Rule::in(['now', 'schedule', 'draft'])],
@@ -48,6 +48,9 @@ new class extends Component {
         ], [
             'accountIds.required' => 'Choose at least one account to post to.',
             'video.required' => 'YouTube, Instagram and TikTok need a video.',
+            'video.max' => 'This video is too large. The maximum is '.config('app.max_upload_mb').' MB.',
+            'video.uploaded' => 'The video failed to upload. It may be larger than '.config('app.max_upload_mb').' MB, or the connection dropped. Please try again.',
+            'video.mimetypes' => 'Please upload an MP4, MOV or WebM video.',
             'caption.required' => 'Write a caption or attach a video.',
         ]);
 
@@ -134,6 +137,7 @@ new class extends Component {
             'hasTikTok' => $selectedPlatforms->contains(Platform::TikTok),
             'hasX' => $selectedPlatforms->contains(Platform::X),
             'remainingPosts' => auth()->user()->remainingPosts(),
+            'maxUploadMb' => config('app.max_upload_mb'),
         ];
     }
 }; ?>
@@ -184,13 +188,44 @@ new class extends Component {
 
             <flux:field>
                 <flux:label>Video</flux:label>
-                <input type="file" wire:model="video" accept="video/mp4,video/quicktime,video/webm"
-                    class="block w-full text-sm file:me-4 file:rounded-md file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-white dark:file:bg-zinc-200 dark:file:text-zinc-900" />
-                <div wire:loading wire:target="video" class="text-sm text-zinc-500">Uploading…</div>
+                {{-- Uploaded via $wire.upload so oversized files are refused before sending, with progress and clear errors. --}}
+                <div x-data="{
+                        maxMb: {{ $maxUploadMb }},
+                        progress: null,
+                        problem: '',
+                        pick(event) {
+                            const file = event.target.files[0];
+                            this.problem = '';
+                            if (! file) return;
+                            const sizeMb = file.size / 1024 / 1024;
+                            if (sizeMb > this.maxMb) {
+                                this.problem = `This video is ${Math.round(sizeMb)} MB. The maximum is ${this.maxMb} MB. Please compress it or trim it, then try again.`;
+                                event.target.value = '';
+                                return;
+                            }
+                            this.progress = 0;
+                            $wire.upload('video', file,
+                                () => { this.progress = null },
+                                () => { this.progress = null; event.target.value = ''; this.problem = 'The upload did not finish. Check your internet connection and try again.' },
+                                (e) => { this.progress = e.detail.progress },
+                            );
+                        },
+                    }">
+                    <input type="file" x-on:change="pick($event)" accept="video/mp4,video/quicktime,video/webm"
+                        class="block w-full text-sm file:me-4 file:rounded-md file:border-0 file:bg-zinc-800 file:px-4 file:py-2 file:text-white dark:file:bg-zinc-200 dark:file:text-zinc-900" />
+
+                    <div x-show="progress !== null" x-cloak class="mt-2">
+                        <div class="flex justify-between text-xs text-zinc-500"><span>Uploading…</span><span x-text="progress + '%'"></span></div>
+                        <div class="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                            <div class="h-full rounded-full bg-zinc-800 transition-all dark:bg-zinc-200" :style="`width: ${progress}%`"></div>
+                        </div>
+                    </div>
+                    <p x-show="problem" x-text="problem" x-cloak class="mt-2 text-sm font-medium text-red-600 dark:text-red-400"></p>
+                </div>
                 @if ($video && ! $errors->has('video'))
                     <video src="{{ $video->temporaryUrl() }}" controls class="mt-2 max-h-80 rounded-lg"></video>
                 @endif
-                <flux:description>MP4, MOV or WebM, up to 1 GB. Vertical 9:16 works best for TikTok, Reels and Shorts.</flux:description>
+                <flux:description>MP4, MOV or WebM, up to {{ $maxUploadMb }} MB. Vertical 9:16 works best for TikTok, Reels and Shorts.</flux:description>
                 <flux:error name="video" />
             </flux:field>
 
