@@ -21,6 +21,7 @@
                     <flux:navlist.item icon="film" :href="route('content')" :current="request()->routeIs('content')" wire:navigate>All content</flux:navlist.item>
                     <flux:navlist.item icon="chat-bubble-left-right" :href="route('inbox')" :current="request()->routeIs('inbox')" :badge="$unread ?: null" wire:navigate>Inbox</flux:navlist.item>
                     <flux:navlist.item icon="fire" :href="route('trending')" :current="request()->routeIs('trending')" wire:navigate>Trending</flux:navlist.item>
+                    <flux:navlist.item icon="academic-cap" :href="route('academy')" :current="request()->routeIs('academy*')" wire:navigate>Academy</flux:navlist.item>
                     <flux:navlist.item icon="link" :href="route('accounts')" :current="request()->routeIs('accounts')" wire:navigate>Connected accounts</flux:navlist.item>
                     @unless (auth()->user()->isAdmin())
                         <flux:navlist.item icon="credit-card" :href="route('billing')" :current="request()->routeIs('billing')" wire:navigate>Plan &amp; billing</flux:navlist.item>
@@ -32,6 +33,9 @@
                         <flux:navlist.item icon="chart-bar" :href="route('admin.overview')" :current="request()->routeIs('admin.overview')" wire:navigate>Overview</flux:navlist.item>
                         <flux:navlist.item icon="users" :href="route('admin.clients')" :current="request()->routeIs('admin.clients', 'admin.client')" wire:navigate>Clients</flux:navlist.item>
                         <flux:navlist.item icon="currency-dollar" :href="route('admin.plans')" :current="request()->routeIs('admin.plans')" wire:navigate>Plans</flux:navlist.item>
+                        @php($pendingPayments = \App\Models\PaymentClaim::pending()->count())
+                        <flux:navlist.item icon="banknotes" :href="route('admin.payments')" :current="request()->routeIs('admin.payments')" :badge="$pendingPayments ?: null" wire:navigate>Payments</flux:navlist.item>
+                        <flux:navlist.item icon="book-open" :href="route('admin.courses')" :current="request()->routeIs('admin.courses', 'admin.course', 'admin.certificates')" wire:navigate>Courses</flux:navlist.item>
                         <flux:navlist.item icon="cog-6-tooth" :href="route('admin.settings')" :current="request()->routeIs('admin.settings')" wire:navigate>Settings</flux:navlist.item>
                     </flux:navlist.group>
                 @endif

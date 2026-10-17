@@ -99,6 +99,26 @@ class User extends Authenticatable // implements MustVerifyEmail
         return $this->hasOne(Subscription::class);
     }
 
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(Certificate::class);
+    }
+
+    public function paymentClaims(): HasMany
+    {
+        return $this->hasMany(PaymentClaim::class);
+    }
+
+    public function completedLessonIds(): array
+    {
+        return LessonProgress::where('user_id', $this->id)->pluck('lesson_id')->all();
+    }
+
     /** Admins always have access; clients need a valid trial or paid plan. */
     public function hasAccess(): bool
     {

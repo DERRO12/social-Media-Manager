@@ -17,6 +17,8 @@ class Plan extends Model
         'max_social_accounts',
         'max_posts_per_month',
         'stripe_price_id',
+        'paypal_url',
+        'yo_url',
         'is_active',
         'sort',
     ];
@@ -50,6 +52,18 @@ class Plan extends Model
     public function monthlyPrice(): float
     {
         return $this->interval === 'year' ? (float) $this->price / 12 : (float) $this->price;
+    }
+
+    /** Payment links the admin set for this plan, e.g. ['paypal' => 'https://paypal.me/…', 'yo' => 'https://…']. */
+    public function paymentLinks(): array
+    {
+        return array_filter(['paypal' => $this->paypal_url, 'yo' => $this->yo_url]);
+    }
+
+    /** End of a paid period starting at $from: one month or one year later. */
+    public function periodEnd(\Carbon\CarbonInterface $from): \Carbon\CarbonInterface
+    {
+        return $this->interval === 'year' ? $from->clone()->addYear() : $from->clone()->addMonth();
     }
 
     public function limitLabel(?int $limit): string

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AcademyPublicController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ChunkedUploadController;
 use App\Http\Controllers\GoogleLoginController;
@@ -23,6 +24,11 @@ Route::middleware('guest')->group(function () {
 Route::view('privacy', 'legal.privacy')->name('privacy');
 Route::view('terms', 'legal.terms')->name('terms');
 
+// Public Academy pages: course catalog, course outlines with free preview lessons, certificate verification.
+Route::get('courses', [AcademyPublicController::class, 'index'])->name('courses.index');
+Route::get('courses/{course:slug}', [AcademyPublicController::class, 'show'])->name('courses.show');
+Route::get('certificates/{certificate:code}', [AcademyPublicController::class, 'certificate'])->name('certificates.show');
+
 // Client workspace: every page only shows the signed-in client's own data,
 // and needs a running trial or an active plan ("has-access").
 Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(function () {
@@ -33,6 +39,13 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
     Volt::route('content', 'content.index')->name('content');
     Volt::route('inbox', 'inbox.index')->name('inbox');
     Volt::route('trending', 'trending.index')->name('trending');
+
+    // Academy (studying needs a trial or plan; the public pages above don't).
+    Volt::route('academy', 'academy.index')->name('academy');
+    Volt::route('academy/certificates', 'academy.certificates')->name('academy.certificates');
+    Volt::route('academy/{course:slug}', 'academy.course')->name('academy.course');
+    Volt::route('academy/{course:slug}/lessons/{lesson}', 'academy.lesson')->name('academy.lesson');
+    Volt::route('academy/{course:slug}/quiz', 'academy.quiz')->name('academy.quiz');
 
     Route::post('uploads/chunk', [ChunkedUploadController::class, 'chunk'])->name('uploads.chunk');
     Route::post('uploads/complete', [ChunkedUploadController::class, 'complete'])->name('uploads.complete');
@@ -58,6 +71,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Volt::route('clients/{user}', 'admin.client')->name('client');
     Volt::route('plans', 'admin.plans')->name('plans');
     Volt::route('settings', 'admin.settings')->name('settings');
+    Volt::route('courses', 'admin.courses')->name('courses');
+    Volt::route('courses/{course}', 'admin.course')->name('course');
+    Volt::route('certificates', 'admin.certificates')->name('certificates');
+    Volt::route('payments', 'admin.payments')->name('payments');
     Route::post('clients/{user}/impersonate', [ImpersonationController::class, 'start'])->name('impersonate');
 });
 

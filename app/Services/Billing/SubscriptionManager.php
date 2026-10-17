@@ -3,6 +3,7 @@
 namespace App\Services\Billing;
 
 use App\Enums\SubscriptionStatus;
+use App\Models\PaymentClaim;
 use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\Subscription;
@@ -81,6 +82,31 @@ class SubscriptionManager
             'ends_at' => $endsAt,
             'notes' => $notes ?? $user->subscription?->notes,
         ]);
+    }
+
+    /**
+     * Approve a client's "I've paid" claim: activate their plan for one billing period. If they're already
+     * paid up on the same plan, the new period is added on top, so paying early never loses days.
+     */
+    public function approvePayment(PaymentClaim $claim, User $admin): Subscription
+    {
+        $user = $claim->user;
+        $plan = $claim->plan ?? throw new \RuntimeException('This payment is not linked to a plan.');
+        $current = $user->subscription;
+
+        $from = $current?->isValid() && $current->plan_id === $plan->id && $current->ends_at?->isFuture() && ! $current->onTrial()
+            ? $current->ends_at
+            : now();
+
+        $claim->update(['status' => 'approved', 'reviewed_by' => $admin->id, 'reviewed_at' => now()]);
+
+        return $this->activateManually($user, $plan, $plan->periodEnd($from),
+            trim(($current?->notes ? $current->notes."\n" : '').'Paid via '.$claim->methodLabel().', ref '.$claim->reference.' ('.now()->toDateString().')'));
+    }
+
+    public function rejectPayment(PaymentClaim $claim, User $admin, ?string $reason): void
+    {
+        $claim->update(['status' => 'rejected', 'reviewed_by' => $admin->id, 'reviewed_at' => now(), 'admin_note' => $reason]);
     }
 
     /** Stop access immediately. */

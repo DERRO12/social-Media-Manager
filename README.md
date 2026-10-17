@@ -25,6 +25,29 @@ How it behaves:
   then point a Stripe webhook at `APP_URL/stripe/webhook` (the exact URL and events are shown on the Settings page).
   Clients then pay with Stripe Checkout and manage cards/invoices in the Stripe portal. Without Stripe, clients see your manual payment contact instead.
 
+### Payment links (PayPal, Yo! Payments / Mobile Money)
+
+1. In **Admin → Plans → Edit**, paste a **PayPal payment link** and/or a **Yo! Payments link** for that plan's price.
+2. Clients see **Pay with PayPal** / **Pay with Mobile Money** on Plan & billing. After paying they press **I've paid** and enter the transaction reference.
+3. You get an email, check the payment in your PayPal / Yo! account, then **Approve** or **Reject** it in **Admin → Payments**
+   (the sidebar shows how many are waiting). Approving activates the plan for one month or year; paying early adds the time on top.
+   The client is emailed either way.
+
+## Academy (courses and certificates)
+
+| Where | What it does |
+|---|---|
+| **Admin → Courses** | Create courses (title, level, description, cover, pass mark, published / featured / certificate on-off). One click adds a complete starter course, *Social Media Marketing Foundations* (12 lessons + 12-question exam), as a draft to edit. |
+| **Course → Lessons** | Modules and lessons in any order. A lesson is a **YouTube video** (any public/unlisted link), **written notes** (Markdown), or both. **Import a whole YouTube playlist** in one go (needs the YouTube API key in Settings). Mark lessons as **free preview**. |
+| **Course → Final quiz** | Multiple-choice questions (2–6 answers) with explanations shown to students who get them wrong. |
+| **Course → Students** | Who started, their progress, their certificate, revoke/restore. |
+| **Admin → Courses → Certificates** | Every certificate (search, correct the name, revoke) and the wording: issuing organisation, signer's name and title. |
+
+Students (any client with a trial or plan) use **Academy** in the sidebar: course catalog, "continue where you left off",
+video lessons with notes and progress, the final quiz (unlocked after all lessons), and **My certificates**.
+Passing awards a certificate with a public verification page (`/certificates/CODE`), a print / save-as-PDF layout and an
+**Add to LinkedIn** button. Visitors without an account can browse **/courses** and watch the free preview lessons.
+
 ## What a client can do
 
 | Page | What it does |
@@ -35,7 +58,9 @@ How it behaves:
 | **All content** | Every video/post on their connected accounts (also ones posted outside the app) with metrics |
 | **Inbox** | Comments from all platforms in one feed: reply, mark read, filter by platform or post |
 | **Connected accounts** | Step-by-step guide; connect / reconnect / sync / disconnect YouTube, Facebook Pages, Instagram, TikTok, LinkedIn, X |
-| **Plan & billing** | Current plan, trial days left, usage against limits, subscribe / switch plan |
+| **Trending** | Live YouTube trending videos and music by country, plus official trend links for TikTok, Instagram, X, Facebook |
+| **Academy** | Social media marketing courses, quizzes and certificates |
+| **Plan & billing** | Current plan, trial days left, usage against limits, pay by card, PayPal or Mobile Money, payment history |
 
 Clients never type their social passwords into this app. They click **Connect**, log in on the platform's own page
 (Google, Facebook, TikTok, …) and approve access; the platform hands back a secure access token, stored encrypted.

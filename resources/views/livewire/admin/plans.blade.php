@@ -13,6 +13,8 @@ new class extends Component {
     public string $maxAccounts = '';
     public string $maxPosts = '';
     public string $stripePriceId = '';
+    public string $paypalUrl = '';
+    public string $yoUrl = '';
     public bool $isActive = true;
     public int $sort = 0;
 
@@ -35,6 +37,8 @@ new class extends Component {
         $this->maxAccounts = (string) $plan->max_social_accounts;
         $this->maxPosts = (string) $plan->max_posts_per_month;
         $this->stripePriceId = (string) $plan->stripe_price_id;
+        $this->paypalUrl = (string) $plan->paypal_url;
+        $this->yoUrl = (string) $plan->yo_url;
         $this->isActive = $plan->is_active;
         $this->sort = $plan->sort;
         $this->resetErrorBag();
@@ -53,8 +57,14 @@ new class extends Component {
             'maxAccounts' => ['nullable', 'integer', 'min:1'],
             'maxPosts' => ['nullable', 'integer', 'min:1'],
             'stripePriceId' => ['nullable', 'string', 'starts_with:price_'],
+            'paypalUrl' => ['nullable', 'url:https', 'max:2000'],
+            'yoUrl' => ['nullable', 'url:https', 'max:2000'],
             'sort' => ['integer', 'min:0'],
-        ], ['stripePriceId.starts_with' => 'Stripe price IDs start with "price_".']);
+        ], [
+            'stripePriceId.starts_with' => 'Stripe price IDs start with "price_".',
+            'paypalUrl.url' => 'Paste the full PayPal link, starting with https://',
+            'yoUrl.url' => 'Paste the full Yo! Payments link, starting with https://',
+        ]);
 
         ($this->editingId ? Plan::findOrFail($this->editingId) : new Plan)->fill([
             'name' => $this->name,
@@ -65,6 +75,8 @@ new class extends Component {
             'max_social_accounts' => $this->maxAccounts === '' ? null : (int) $this->maxAccounts,
             'max_posts_per_month' => $this->maxPosts === '' ? null : (int) $this->maxPosts,
             'stripe_price_id' => $this->stripePriceId ?: null,
+            'paypal_url' => $this->paypalUrl ?: null,
+            'yo_url' => $this->yoUrl ?: null,
             'is_active' => $this->isActive,
             'sort' => $this->sort,
         ])->save();
@@ -81,7 +93,7 @@ new class extends Component {
 
     private function resetForm(): void
     {
-        $this->reset('editingId', 'name', 'description', 'price', 'currency', 'interval', 'maxAccounts', 'maxPosts', 'stripePriceId', 'isActive', 'sort');
+        $this->reset('editingId', 'name', 'description', 'price', 'currency', 'interval', 'maxAccounts', 'maxPosts', 'stripePriceId', 'paypalUrl', 'yoUrl', 'isActive', 'sort');
         $this->resetErrorBag();
     }
 
@@ -120,7 +132,7 @@ new class extends Component {
                 <ul class="mt-4 flex-1 space-y-1 text-sm">
                     <li>Social accounts: <strong>{{ $plan->limitLabel($plan->max_social_accounts) }}</strong></li>
                     <li>Posts per month: <strong>{{ $plan->limitLabel($plan->max_posts_per_month) }}</strong></li>
-                    <li>Online payment: <strong>{{ $plan->stripe_price_id ? 'Stripe' : 'Manual only' }}</strong></li>
+                    <li>Payment: <strong>{{ collect([$plan->stripe_price_id ? 'Stripe' : null, $plan->paypal_url ? 'PayPal' : null, $plan->yo_url ? 'Yo! Payments' : null])->filter()->implode(', ') ?: 'Manual only' }}</strong></li>
                     <li>Clients on this plan: <strong>{{ $plan->clients_count }}</strong></li>
                 </ul>
                 <div class="mt-4 flex gap-2">
@@ -151,6 +163,14 @@ new class extends Component {
             <div class="grid grid-cols-2 gap-3">
                 <flux:input wire:model="maxAccounts" type="number" min="1" label="Max social accounts" placeholder="Unlimited" />
                 <flux:input wire:model="maxPosts" type="number" min="1" label="Max posts / month" placeholder="Unlimited" />
+            </div>
+            <div class="flex flex-col gap-3 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-900">
+                <div class="text-sm font-medium">Payment links (optional)</div>
+                <flux:input wire:model="paypalUrl" type="url" label="PayPal payment link" placeholder="https://www.paypal.com/ncp/payment/… or https://paypal.me/yourname/39"
+                    description="Create it in PayPal → Pay links & buttons, for this plan's price." />
+                <flux:input wire:model="yoUrl" type="url" label="Yo! Payments link (Mobile Money)" placeholder="https://…"
+                    description="Your Yo! Payments payment page or link for this plan's price (MTN / Airtel Mobile Money)." />
+                <flux:text class="text-xs">Clients pay with the link, then send you their transaction reference. You approve it under Admin → Payments to activate the plan.</flux:text>
             </div>
             <flux:input wire:model="stripePriceId" label="Stripe Price ID (optional)" placeholder="price_..."
                 description="Only needed for online card payments. Create the price in your Stripe dashboard and paste its ID." />

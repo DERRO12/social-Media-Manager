@@ -2,6 +2,7 @@
     $appName = config('app.name');
     $trialDays = (int) \App\Models\Setting::get('billing.trial_days', 14);
     $plans = \App\Models\Plan::active()->get();
+    $courses = \App\Models\Course::published()->withCount('lessons')->with('lessons:id,course_id,duration_minutes')->take(3)->get();
     $user = auth()->user();
     $ctaUrl = $user ? route('dashboard') : (Route::has('register') ? route('register') : route('login'));
     $ctaLabel = $user ? 'Go to your dashboard' : ($trialDays > 0 ? "Start your {$trialDays}-day free trial" : 'Create your account');
@@ -59,6 +60,7 @@
             <div class="hidden items-center gap-8 text-sm text-zinc-600 md:flex dark:text-zinc-400">
                 <a href="#features" class="hover:text-zinc-900 dark:hover:text-white">Features</a>
                 <a href="#how" class="hover:text-zinc-900 dark:hover:text-white">How it works</a>
+                <a href="{{ route('courses.index') }}" class="hover:text-zinc-900 dark:hover:text-white">Courses</a>
                 @if ($plans->isNotEmpty())
                     <a href="#pricing" class="hover:text-zinc-900 dark:hover:text-white">Pricing</a>
                 @endif
@@ -88,6 +90,7 @@
             <div class="flex flex-col gap-3 text-sm">
                 <a href="#features" x-on:click="open = false">Features</a>
                 <a href="#how" x-on:click="open = false">How it works</a>
+                <a href="{{ route('courses.index') }}">Courses</a>
                 @if ($plans->isNotEmpty())
                     <a href="#pricing" x-on:click="open = false">Pricing</a>
                 @endif
@@ -249,6 +252,40 @@
             </div>
         </section>
 
+        {{-- Academy --}}
+        <section id="academy" class="border-t border-zinc-200 bg-zinc-50 py-20 dark:border-zinc-800 dark:bg-zinc-900/40">
+            <div class="mx-auto max-w-6xl px-4 sm:px-6">
+                <div class="grid items-end gap-6 md:grid-cols-[1fr_auto]">
+                    <div class="max-w-2xl">
+                        <span class="text-sm font-medium text-fuchsia-600 dark:text-fuchsia-400">{{ $appName }} Academy</span>
+                        <h2 class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Learn social media marketing. Get certified.</h2>
+                        <p class="mt-4 text-zinc-600 dark:text-zinc-400">Short video lessons, practical notes, a final quiz and a certificate you can add to LinkedIn, included with every plan.</p>
+                    </div>
+                    <a href="{{ route('courses.index') }}" class="inline-flex items-center gap-2 font-medium text-zinc-900 hover:underline dark:text-white">
+                        Browse all courses <flux:icon name="arrow-right" variant="mini" />
+                    </a>
+                </div>
+
+                @if ($courses->isNotEmpty())
+                    <div class="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                        @foreach ($courses as $course)
+                            <x-academy.course-card :course="$course" :href="route('courses.show', $course)" />
+                        @endforeach
+                    </div>
+                @else
+                    <div class="mt-10 grid gap-6 md:grid-cols-3">
+                        @foreach ([['play-circle', 'Video lessons', 'Bite-sized lessons you can watch on any device.'], ['pencil-square', 'Final quizzes', 'Check what you learned, with explanations.'], ['check-badge', 'Certificates', 'Verifiable certificates, one click to add to LinkedIn.']] as [$icon, $title, $text])
+                            <div class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+                                <div class="flex size-10 items-center justify-center rounded-xl bg-linear-to-br from-indigo-500 to-fuchsia-500 text-white"><flux:icon :name="$icon" class="size-5" /></div>
+                                <h3 class="mt-4 font-semibold">{{ $title }}</h3>
+                                <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{{ $text }}</p>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </section>
+
         {{-- Inbox highlight --}}
         <section class="border-y border-zinc-200 bg-zinc-950 py-20 text-white dark:border-zinc-800">
             <div class="mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2">
@@ -333,6 +370,7 @@
                                         'Scheduling & multi-platform publishing',
                                         'Unified comment inbox',
                                         'Content analytics',
+                                        'Marketing courses & certificates',
                                     ] as $line)
                                         <li class="flex items-center gap-2">
                                             <flux:icon name="check" variant="mini" @class(['text-fuchsia-400' => $isFeatured, 'text-green-600' => ! $isFeatured]) />
