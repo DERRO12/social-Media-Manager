@@ -20,6 +20,8 @@ class ContentItem extends Model
         'views',
         'likes',
         'comments_count',
+        'comments_synced_count',
+        'comments_synced_at',
         'shares',
     ];
 
@@ -27,6 +29,7 @@ class ContentItem extends Model
     {
         return [
             'published_at' => 'datetime',
+            'comments_synced_at' => 'datetime',
         ];
     }
 

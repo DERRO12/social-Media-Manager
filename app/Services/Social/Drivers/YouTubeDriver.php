@@ -236,31 +236,89 @@ class YouTubeDriver extends AbstractDriver
         ), $videos);
     }
 
+    /** Most comment threads loaded per video per sync (newest first); 100 per page, 1 quota unit per page. */
+    private const MAX_THREADS = 500;
+
+    private bool $lastFetchComplete = true;
+
+    /** True unless the last fetchComments() stopped at MAX_THREADS; then older comments may be missing, not deleted. */
+    public function returnsAllComments(): bool
+    {
+        return $this->lastFetchComplete;
+    }
+
+    /**
+     * Every comment thread on the video, with all of its replies. commentThreads only includes a few
+     * replies per thread, so threads with more are completed with comments.list (parentId).
+     */
     public function fetchComments(SocialAccount $account, ContentItem $item): array
     {
-        $response = Http::withToken($this->token($account))->get(self::API.'/commentThreads', [
-            'part' => 'snippet,replies',
-            'videoId' => $item->platform_content_id,
-            'maxResults' => 50,
-            'order' => 'time',
-        ]);
-
-        // Comments disabled on this video.
-        if ($response->status() === 403 && str_contains($response->body(), 'commentsDisabled')) {
-            return [];
-        }
-
+        $token = $this->token($account);
         $comments = [];
+        $threads = 0;
+        $pageToken = null;
 
-        foreach ($this->ok($response, 'loading comments')->json('items', []) as $thread) {
-            $comments[] = $this->mapComment($account, $thread['snippet']['topLevelComment']);
+        do {
+            $response = Http::withToken($token)->get(self::API.'/commentThreads', array_filter([
+                'part' => 'snippet,replies',
+                'videoId' => $item->platform_content_id,
+                'maxResults' => 100,
+                'order' => 'time',
+                'textFormat' => 'plainText',
+                'pageToken' => $pageToken,
+            ]));
 
-            foreach ($thread['replies']['comments'] ?? [] as $reply) {
-                $comments[] = $this->mapComment($account, $reply);
+            // Comments are turned off on this video.
+            if ($response->status() === 403 && str_contains($response->body(), 'commentsDisabled')) {
+                $this->lastFetchComplete = true;
+
+                return [];
             }
-        }
+
+            foreach ($this->ok($response, 'loading comments')->json('items', []) as $thread) {
+                $top = $thread['snippet']['topLevelComment'];
+                $comments[] = $this->mapComment($account, $top);
+
+                $replies = $thread['replies']['comments'] ?? [];
+                $replies = ($thread['snippet']['totalReplyCount'] ?? 0) > count($replies)
+                    ? $this->allReplies($token, $top['id'])
+                    : $replies;
+
+                foreach ($replies as $reply) {
+                    $comments[] = $this->mapComment($account, $reply);
+                }
+
+                $threads++;
+            }
+
+            $pageToken = $response->json('nextPageToken');
+        } while ($pageToken && $threads < self::MAX_THREADS);
+
+        $this->lastFetchComplete = ! $pageToken;
 
         return $comments;
+    }
+
+    /** All replies to one top-level comment, oldest first. */
+    private function allReplies(string $token, string $parentId): array
+    {
+        $replies = [];
+        $pageToken = null;
+
+        do {
+            $response = $this->ok(Http::withToken($token)->get(self::API.'/comments', array_filter([
+                'part' => 'snippet',
+                'parentId' => $parentId,
+                'maxResults' => 100,
+                'textFormat' => 'plainText',
+                'pageToken' => $pageToken,
+            ])), 'loading replies');
+
+            array_push($replies, ...$response->json('items', []));
+            $pageToken = $response->json('nextPageToken');
+        } while ($pageToken && count($replies) < 1000);
+
+        return $replies;
     }
 
     public function reply(SocialAccount $account, Comment $comment, string $message): CommentData
@@ -282,7 +340,8 @@ class YouTubeDriver extends AbstractDriver
 
         return new CommentData(
             platformCommentId: $comment['id'],
-            body: $s['textOriginal'] ?? strip_tags($s['textDisplay'] ?? ''),
+            // textOriginal is only returned for some comments; textDisplay (plain text) can contain &amp; etc.
+            body: $s['textOriginal'] ?? html_entity_decode(strip_tags($s['textDisplay'] ?? ''), ENT_QUOTES | ENT_HTML5),
             parentPlatformCommentId: $s['parentId'] ?? null,
             authorName: $s['authorDisplayName'] ?? null,
             authorHandle: $s['authorDisplayName'] ?? null,

@@ -1,10 +1,12 @@
 <?php
 
 use App\Enums\Platform;
+use App\Jobs\SyncSocialAccount;
+use App\Models\Comment;
 use App\Services\Social\Contracts\PlatformDriver;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Url;
 use Livewire\Volt\Component;
-use App\Models\Comment;
 use Livewire\WithPagination;
 
 new class extends Component {
@@ -29,27 +31,48 @@ new class extends Component {
         }
     }
 
+    /** Mark a whole conversation (the comment and its replies) as read. */
     public function markRead(int $id): void
     {
-        auth()->user()->comments()->findOrFail($id)->update(['read_at' => now()]);
+        $thread = auth()->user()->comments()->findOrFail($id);
+
+        Comment::where('content_item_id', $thread->content_item_id)
+            ->where(fn ($q) => $q->where('id', $thread->id)->orWhere('parent_platform_comment_id', $thread->platform_comment_id))
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
     }
 
     public function markAllRead(): void
     {
-        Comment::whereIn('id', $this->query()->whereNull('comments.read_at')->pluck('comments.id'))
+        Comment::whereIn('social_account_id', auth()->user()->socialAccounts()->pluck('id'))
+            ->when($this->platform, fn ($q) => $q->whereHas('account', fn ($a) => $a->where('platform', $this->platform)))
+            ->when($this->item, fn ($q) => $q->where('content_item_id', $this->item))
+            ->whereNull('read_at')
             ->update(['read_at' => now()]);
     }
 
+    /** Check the platforms right now instead of waiting for the next automatic sync. */
     public function refresh(): void
     {
-        auth()->user()->socialAccounts->each(function ($account) {
-            if ($account->driver()->supports(PlatformDriver::COMMENTS)) {
-                \App\Jobs\SyncSocialAccount::dispatch($account);
-            }
-        });
+        $failed = [];
 
-        session()->flash('status', 'Checking all platforms for new comments…');
-        $this->redirectRoute('inbox', navigate: true);
+        foreach (auth()->user()->socialAccounts as $account) {
+            if (! $account->driver()->supports(PlatformDriver::COMMENTS)) {
+                continue;
+            }
+
+            SyncSocialAccount::dispatchSync($account);
+
+            if ($account->fresh()->last_error) {
+                $failed[] = $account->name;
+            }
+        }
+
+        session()->flash($failed ? 'error' : 'status', $failed
+            ? 'Some accounts could not be checked: '.implode(', ', $failed).'. See Connected accounts.'
+            : 'Up to date.');
+
+        $this->redirectRoute('inbox', ['filter' => $this->filter, 'platform' => $this->platform ?: null, 'item' => $this->item], navigate: true);
     }
 
     public function startReply(int $id): void
@@ -79,53 +102,81 @@ new class extends Component {
             ['social_account_id' => $comment->social_account_id, 'read_at' => now(), ...$data->toAttributes()],
         );
 
-        $comment->update(['read_at' => now()]);
+        $this->markRead($comment->parent_platform_comment_id
+            ? Comment::where('content_item_id', $comment->content_item_id)->where('platform_comment_id', $comment->parent_platform_comment_id)->value('id') ?? $comment->id
+            : $comment->id);
         $this->reset('replyingTo', 'reply');
     }
 
-    private function query()
+    /** Conversations: top-level comments, newest activity (comment or latest reply) first. */
+    private function threads()
     {
+        $lastActivity = '(select max(r.commented_at) from comments r where r.content_item_id = comments.content_item_id and r.parent_platform_comment_id = comments.platform_comment_id)';
+        $unreadReply = fn ($q) => $q->from('comments as u')
+            ->whereColumn('u.content_item_id', 'comments.content_item_id')
+            ->whereColumn('u.parent_platform_comment_id', 'comments.platform_comment_id')
+            ->whereNull('u.read_at')
+            ->where('u.is_own', false);
+
         return auth()->user()->comments()
-            ->where('comments.is_own', false)
-            ->when($this->filter === 'unread', fn ($q) => $q->whereNull('comments.read_at'))
+            ->whereNull('comments.parent_platform_comment_id')
+            ->when($this->filter === 'unread', fn ($q) => $q->where(fn ($q) => $q
+                ->where(fn ($q) => $q->whereNull('comments.read_at')->where('comments.is_own', false))
+                ->orWhereExists($unreadReply)))
             ->when($this->platform, fn ($q) => $q->where('social_accounts.platform', $this->platform))
-            ->when($this->item, fn ($q) => $q->where('comments.content_item_id', $this->item));
+            ->when($this->item, fn ($q) => $q->where('comments.content_item_id', $this->item))
+            ->orderByDesc(DB::raw("coalesce({$lastActivity}, comments.commented_at)"));
     }
 
     public function with(): array
     {
-        $comments = $this->query()
-            ->with('account', 'contentItem')
-            ->latest('comments.commented_at')
-            ->paginate(20);
-
-        // Our own replies, shown under each comment.
-        $replies = auth()->user()->comments()
-            ->where('comments.is_own', true)
-            ->whereIn('comments.parent_platform_comment_id', $comments->pluck('platform_comment_id'))
-            ->get()
-            ->groupBy('parent_platform_comment_id');
+        $user = auth()->user();
+        $threads = $this->threads()->with('account', 'contentItem', 'replies')->paginate(15);
 
         return [
-            'comments' => $comments,
-            'replies' => $replies,
-            'filteredItem' => $this->item ? auth()->user()->contentItems()->find($this->item) : null,
-            'unreadCount' => auth()->user()->comments()->unread()->count(),
+            'threads' => $threads,
+            'filteredItem' => $this->item ? $user->contentItems()->find($this->item) : null,
+            'unreadCount' => $user->comments()->unread()->count(),
+            'lastChecked' => $user->socialAccounts()->max('last_synced_at'),
+            'syncMinutes' => config('app.sync_every_minutes'),
+            'readOnly' => $user->socialAccounts->reject(fn ($a) => $a->driver()->supports(PlatformDriver::COMMENTS))->pluck('platform')->unique(),
         ];
     }
 }; ?>
 
-<div class="flex flex-col gap-6">
+{{-- Re-reads the inbox every 20 seconds while it's open (paused while you're writing a reply). --}}
+<div class="flex flex-col gap-6" @if (! $replyingTo) wire:poll.20s.visible @endif>
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">Inbox</flux:heading>
-            <flux:text>Comments from every platform in one feed. {{ $unreadCount }} unread.</flux:text>
+            <flux:text>
+                Comments and replies from every platform. {{ $unreadCount }} unread.
+                <span class="inline-flex items-center gap-1 text-xs">
+                    <span class="size-2 animate-pulse rounded-full bg-green-500"></span>
+                    Live · checked {{ $lastChecked ? \Illuminate\Support\Carbon::parse($lastChecked)->diffForHumans() : 'not yet' }}, automatically every {{ $syncMinutes }} min
+                </span>
+            </flux:text>
         </div>
         <div class="flex gap-2">
-            <flux:button icon="arrow-path" wire:click="refresh">Refresh</flux:button>
+            <flux:button icon="arrow-path" wire:click="refresh" wire:loading.attr="disabled" wire:target="refresh">
+                <span wire:loading.remove wire:target="refresh">Check now</span>
+                <span wire:loading wire:target="refresh">Checking…</span>
+            </flux:button>
             <flux:button icon="check" wire:click="markAllRead">Mark all as read</flux:button>
         </div>
     </div>
+
+    @if ($readOnly->isNotEmpty())
+        <flux:callout variant="secondary" icon="information-circle"
+            :heading="'Comments from '.$readOnly->map->label()->implode(', ').' can’t be shown.'">
+            <flux:callout.text>
+                {{ $readOnly->contains(\App\Enums\Platform::X) ? 'X only allows reading replies on its paid API plans. ' : '' }}
+                {{ $readOnly->contains(\App\Enums\Platform::TikTok) ? 'TikTok doesn’t share comment text with apps. ' : '' }}
+                {{ $readOnly->contains(\App\Enums\Platform::LinkedIn) ? 'LinkedIn needs Community Management approval. ' : '' }}
+                Their like and comment counts still update under All content where available.
+            </flux:callout.text>
+        </flux:callout>
+    @endif
 
     <div class="flex flex-wrap items-center gap-3">
         <flux:radio.group wire:model.live="filter" variant="segmented">
@@ -147,58 +198,37 @@ new class extends Component {
     </div>
 
     <div class="flex flex-col gap-3">
-        @forelse ($comments as $comment)
-            <div wire:key="comment-{{ $comment->id }}" @class([
+        @forelse ($threads as $thread)
+            @php($canReply = $thread->account->driver()->supports(PlatformDriver::REPLY))
+            @php($threadUnread = (! $thread->read_at && ! $thread->is_own) || $thread->replies->contains(fn ($r) => ! $r->read_at && ! $r->is_own))
+            <div wire:key="thread-{{ $thread->id }}" @class([
                 'rounded-xl border p-4',
-                'border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20' => ! $comment->read_at,
-                'border-zinc-200 dark:border-zinc-700' => $comment->read_at,
+                'border-blue-300 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20' => $threadUnread,
+                'border-zinc-200 dark:border-zinc-700' => ! $threadUnread,
             ])>
-                <div class="flex gap-3">
-                    <x-avatar size="sm" :src="$comment->author_avatar_url" :name="$comment->author_name ?? '?'" />
-                    <div class="min-w-0 flex-1">
-                        <div class="flex flex-wrap items-center gap-2 text-sm">
-                            <span class="font-medium">{{ $comment->author_name ?? 'Unknown' }}</span>
-                            @if ($comment->author_handle && $comment->author_handle !== $comment->author_name)
-                                <span class="text-zinc-500">{{ $comment->author_handle }}</span>
-                            @endif
-                            <x-platform-badge :platform="$comment->account->platform" />
-                            <span class="text-zinc-500">· {{ $comment->commented_at?->diffForHumans() }}</span>
-                        </div>
-                        <p class="mt-1 whitespace-pre-line text-sm">{{ $comment->body }}</p>
-                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-500">
-                            <span class="flex items-center gap-1"><flux:icon name="heart" variant="micro" /> {{ $comment->likes }}</span>
-                            <span class="truncate">
-                                on <a href="{{ $comment->contentItem->permalink }}" target="_blank" rel="noopener" class="underline">{{ Str::limit($comment->contentItem->title ?: $comment->contentItem->caption ?: 'post', 50) }}</a>
-                                · {{ $comment->account->name }}
-                            </span>
-                        </div>
-
-                        @foreach ($replies->get($comment->platform_comment_id, []) as $own)
-                            <div class="mt-3 rounded-lg bg-zinc-100 px-3 py-2 text-sm dark:bg-zinc-800">
-                                <span class="font-medium">You:</span> {{ $own->body }}
-                            </div>
-                        @endforeach
-
-                        @if ($replyingTo === $comment->id)
-                            <form wire:submit="sendReply" class="mt-3 flex flex-col gap-2">
-                                <flux:textarea wire:model="reply" rows="2" placeholder="Write a reply…" autofocus />
-                                <flux:error name="reply" />
-                                <div class="flex gap-2">
-                                    <flux:button size="sm" type="submit" variant="primary" wire:loading.attr="disabled" wire:target="sendReply">Send reply</flux:button>
-                                    <flux:button size="sm" variant="ghost" wire:click="$set('replyingTo', null)">Cancel</flux:button>
-                                </div>
-                            </form>
-                        @endif
-                    </div>
-                    <div class="flex shrink-0 flex-col gap-2">
-                        @if ($comment->account->driver()->supports(PlatformDriver::REPLY) && $replyingTo !== $comment->id)
-                            <flux:button size="sm" icon="arrow-uturn-left" wire:click="startReply({{ $comment->id }})">Reply</flux:button>
-                        @endif
-                        @unless ($comment->read_at)
-                            <flux:button size="sm" variant="ghost" icon="check" wire:click="markRead({{ $comment->id }})">Read</flux:button>
-                        @endunless
-                    </div>
+                <div class="mb-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                    <x-platform-badge :platform="$thread->account->platform" />
+                    <span class="truncate">
+                        on <a href="{{ $thread->contentItem->permalink }}" target="_blank" rel="noopener" class="underline">{{ Str::limit($thread->contentItem->title ?: $thread->contentItem->caption ?: 'post', 60) }}</a>
+                        · {{ $thread->account->name }}
+                    </span>
+                    @if ($thread->replies->isNotEmpty())
+                        <span>· {{ $thread->replies->count() }} {{ Str::plural('reply', $thread->replies->count()) }}</span>
+                    @endif
+                    @if ($threadUnread)
+                        <flux:button size="xs" variant="ghost" icon="check" class="ms-auto" wire:click="markRead({{ $thread->id }})">Mark read</flux:button>
+                    @endif
                 </div>
+
+                @include('partials.inbox-comment', ['comment' => $thread, 'canReply' => $canReply, 'isReply' => false])
+
+                @if ($thread->replies->isNotEmpty())
+                    <div class="ms-5 mt-3 flex flex-col gap-3 border-s-2 border-zinc-200 ps-4 dark:border-zinc-700">
+                        @foreach ($thread->replies as $reply)
+                            @include('partials.inbox-comment', ['comment' => $reply, 'canReply' => $canReply, 'isReply' => true])
+                        @endforeach
+                    </div>
+                @endif
             </div>
         @empty
             <div class="rounded-xl border border-dashed border-zinc-300 p-10 text-center dark:border-zinc-600">
@@ -207,5 +237,5 @@ new class extends Component {
         @endforelse
     </div>
 
-    {{ $comments->links() }}
+    {{ $threads->links() }}
 </div>

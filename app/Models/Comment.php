@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Comment extends Model
 {
@@ -39,6 +40,13 @@ class Comment extends Model
     public function contentItem(): BelongsTo
     {
         return $this->belongsTo(ContentItem::class);
+    }
+
+    /** Replies in the same thread (platform comment IDs are unique per platform). */
+    public function replies(): HasMany
+    {
+        return $this->hasMany(Comment::class, 'parent_platform_comment_id', 'platform_comment_id')
+            ->orderBy('commented_at');
     }
 
     public function scopeUnread(Builder $query): void

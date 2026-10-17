@@ -50,6 +50,9 @@ interface PlatformDriver
     /** @return CommentData[] */
     public function fetchComments(SocialAccount $account, ContentItem $item): array;
 
+    /** Whether fetchComments() returns every comment, so ones missing from it were deleted on the platform. */
+    public function returnsAllComments(): bool;
+
     public function reply(SocialAccount $account, Comment $comment, string $message): CommentData;
 
     /** Ask the platform to invalidate our access token (best effort; called when an account is disconnected). */

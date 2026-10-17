@@ -82,6 +82,13 @@ return [
     'max_upload_mb' => (int) env('MAX_UPLOAD_MB', 2048),
 
     /*
+    | How often (minutes, 1-59) connected accounts are checked for new content, metrics and comments.
+    | Each check is cheap (comments are only downloaded where counts changed); raise it if you hit API quotas.
+    */
+
+    'sync_every_minutes' => max(1, min(59, (int) env('SYNC_EVERY_MINUTES', 5))),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

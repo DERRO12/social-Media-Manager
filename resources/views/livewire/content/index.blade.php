@@ -50,7 +50,8 @@ new class extends Component {
     }
 }; ?>
 
-<div class="flex flex-col gap-6">
+{{-- Re-reads views, likes and comment counts every minute while the page is open. --}}
+<div class="flex flex-col gap-6" wire:poll.60s.visible>
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
             <flux:heading size="xl">All content</flux:heading>

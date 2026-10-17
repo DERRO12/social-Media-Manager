@@ -42,6 +42,12 @@ abstract class AbstractDriver implements PlatformDriver
         throw PlatformException::unsupported($this->platform()->label(), 'replying to comments');
     }
 
+    /** Most drivers load only the latest page of comments, so a missing comment may just be older. */
+    public function returnsAllComments(): bool
+    {
+        return false;
+    }
+
     /** Platforms without a revoke endpoint: deleting the stored token is all we can do. */
     public function revoke(SocialAccount $account): void {}
 
