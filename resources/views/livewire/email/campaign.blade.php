@@ -115,7 +115,8 @@ new class extends Component {
             return;
         }
 
-        if (! $user->mailbox) {
+        $mailbox = \App\Models\Mailbox::forUser($user);
+        if (! $mailbox) {
             [$this->noticeOk, $this->notice] = [false, 'Connect your mailbox first (Settings & sign-up form).'];
 
             return;
@@ -123,9 +124,9 @@ new class extends Component {
 
         try {
             $me = new Contact(['email' => $user->email, 'name' => $user->name]);
-            Smtp::mailer('mailbox-'.$user->mailbox->id, $user->mailbox->mailerConfig())
+            Smtp::mailer($mailbox->mailerName(), $mailbox->mailerConfig())
                 ->to($user->email, $user->name)
-                ->send(new CampaignMail($this->campaign, $me, $user->mailbox));
+                ->send(new CampaignMail($this->campaign, $me, $mailbox));
             [$this->noticeOk, $this->notice] = [true, 'Test sent to '.$user->email.'.'];
         } catch (Throwable $e) {
             [$this->noticeOk, $this->notice] = [false, Smtp::explain($e)];
@@ -156,7 +157,7 @@ new class extends Component {
             return;
         }
 
-        $ready = $this->campaign->isSms() ? EgoSms::accountFor(auth()->user()) !== null : auth()->user()->mailbox !== null;
+        $ready = $this->campaign->isSms() ? EgoSms::accountFor(auth()->user()) !== null : \App\Models\Mailbox::forUser(auth()->user()) !== null;
         if (! $ready) {
             $this->addError('scheduleAt', $this->campaign->isSms() ? 'Set up SMS first.' : 'Connect your mailbox first.');
 

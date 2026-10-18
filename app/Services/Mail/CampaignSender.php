@@ -23,7 +23,7 @@ class CampaignSender
                 throw new RuntimeException('Write your message first.');
             }
         } else {
-            if (! $user->mailbox) {
+            if (! \App\Models\Mailbox::forUser($user)) {
                 throw new RuntimeException('Connect your mailbox first (Email marketing → Settings).');
             }
             if (trim($campaign->subject) === '' || trim((string) $campaign->body) === '') {

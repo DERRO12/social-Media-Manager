@@ -45,6 +45,7 @@ new class extends Component {
         <div>
             <flux:heading size="xl">Connected accounts</flux:heading>
             <flux:text>Connect each social account once. You can then post to it, see its content and answer its comments here.</flux:text>
+            <x-help-video topic="connect_accounts" class="mt-2" />
         </div>
         @if ($max !== null)
             <flux:badge :color="$slots === 0 ? 'red' : 'zinc'">{{ $accounts->count() }} / {{ $max }} accounts used</flux:badge>

@@ -205,6 +205,7 @@ new class extends Component {
 
         return [
             'box' => $user->mailbox,
+            'shared' => $user->mailbox ? null : \App\Models\Mailbox::forUser($user),
             'smsOwn' => $user->smsAccount,
             'smsShared' => EgoSms::platformAccount() !== null,
             'smsLeft' => EgoSms::remainingFor($user),
@@ -224,14 +225,25 @@ new class extends Component {
                 <flux:heading size="lg">Your mailbox</flux:heading>
                 @if ($box)
                     <flux:badge color="green" icon="check">Connected</flux:badge>
+                @elseif ($shared)
+                    <flux:badge color="sky">Using {{ config('app.name') }}’s mailbox · {{ number_format($shared->remainingToday()) }} left today</flux:badge>
                 @else
                     <flux:badge>Not connected</flux:badge>
                 @endif
             </div>
-            <flux:text class="text-sm">
-                Newsletters are sent from your own email address, so replies come straight to you and people recognise the sender.
-                Your app password is stored encrypted and only used to send your emails.
-            </flux:text>
+            @if ($shared)
+                <flux:text class="text-sm">
+                    You can already send: your emails go out from {{ config('app.name') }}’s mailbox with <strong>your name</strong> as the sender, and replies
+                    come to <strong>{{ auth()->user()->email }}</strong> (up to {{ number_format($shared->daily_limit) }} a day).
+                    Connect your own Gmail below to send from your own address and send more.
+                </flux:text>
+            @else
+                <flux:text class="text-sm">
+                    Newsletters are sent from your own email address, so replies come straight to you and people recognise the sender.
+                    Your app password is stored encrypted and only used to send your emails.
+                </flux:text>
+            @endif
+            <x-help-video topic="app_password" />
             <form wire:submit="saveMail" class="flex flex-col gap-4">
                 @include('partials.mailbox-fields', ['passwordSaved' => (bool) $box])
                 <div class="grid gap-4 sm:grid-cols-2">
@@ -272,6 +284,7 @@ new class extends Component {
                     Send SMS through your own <a href="https://www.egosms.co" target="_blank" rel="noopener" class="underline">EgoSMS</a> account: your business name as the sender, and you top up credit with EgoSMS.
                 @endif
             </flux:text>
+            <x-help-video topic="egosms_account" />
             <form wire:submit="saveSms" class="flex flex-col gap-4">
                 <div class="grid gap-4 sm:grid-cols-2">
                     <flux:input wire:model="smsUsername" label="EgoSMS username" autocomplete="off" />

@@ -194,6 +194,7 @@ new class extends Component {
 
 <div class="flex flex-col gap-6">
     @include('partials.grow-tabs')
+    <x-help-video topic="public_page" class="mt-2" />
 
     <div class="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div class="flex min-w-0 flex-col gap-6">

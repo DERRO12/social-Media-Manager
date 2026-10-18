@@ -96,6 +96,7 @@ new class extends Component {
     <div>
         <flux:heading size="xl">Links &amp; QR codes</flux:heading>
         <flux:text>Short links that count every click, so you know which post, bio or flyer brings people. Each one has a QR code to print.</flux:text>
+        <x-help-video topic="links_qr" class="mt-2" />
     </div>
 
     <div class="grid gap-6 xl:grid-cols-[1fr_340px]">

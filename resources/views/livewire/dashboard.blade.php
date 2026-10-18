@@ -38,6 +38,7 @@ new class extends Component {
         <div>
             <flux:heading size="xl">Welcome back, {{ auth()->user()->name }}</flux:heading>
             <flux:text>Everything across your social accounts in one place.</flux:text>
+            <x-help-video topic="getting_started" class="mt-2" />
         </div>
         <flux:button variant="primary" icon="plus" :href="route('compose')" wire:navigate>Create post</flux:button>
     </div>

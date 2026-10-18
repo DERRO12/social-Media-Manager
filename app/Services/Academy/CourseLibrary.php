@@ -19,6 +19,7 @@ class CourseLibrary
 {
     /** Suggested study order; courses not listed here come after, alphabetically. */
     private const ORDER = [
+        'complete-guide-to-the-platform',
         StarterCourse::SLUG,
         'tiktok-growth-going-viral',
         'instagram-growth-reels-stories-sales',
@@ -26,6 +27,8 @@ class CourseLibrary
         'facebook-pages-and-groups-for-business',
         'linkedin-and-x-personal-brand-b2b',
         'create-great-content-with-your-phone',
+        'email-and-sms-marketing',
+        'whatsapp-business-marketing',
         'google-business-profile-and-local-seo',
     ];
 

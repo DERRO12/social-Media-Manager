@@ -48,9 +48,9 @@ class GrowOnGoogleTest extends TestCase
     {
         $library = app(CourseLibrary::class)->all();
 
-        $this->assertCount(8, $library);
-        $this->assertSame('social-media-marketing-foundations', array_key_first($library));
-        $this->assertSame('tiktok-growth-going-viral', array_keys($library)[1]);
+        $this->assertCount(11, $library);
+        $this->assertSame('complete-guide-to-the-platform', array_key_first($library));
+        $this->assertSame('social-media-marketing-foundations', array_keys($library)[1]);
 
         foreach ($library as $slug => $course) {
             $this->assertNotEmpty($course['modules'], $slug);
@@ -63,11 +63,11 @@ class GrowOnGoogleTest extends TestCase
     public function test_admin_adds_and_publishes_the_whole_library(): void
     {
         Volt::actingAs($this->admin())->test('admin.courses')
-            ->assertSee('Course library: 8 ready-made courses')
+            ->assertSee('Course library: 11 ready-made courses')
             ->call('installAll', true);
 
-        $this->assertSame(8, Course::where('is_published', true)->count());
-        $this->assertSame(56, \App\Models\Lesson::count());
+        $this->assertSame(11, Course::where('is_published', true)->count());
+        $this->assertSame(84, \App\Models\Lesson::count());
 
         $tiktok = Course::firstWhere('slug', 'tiktok-growth-going-viral');
         $this->assertSame(8, $tiktok->questions()->count());

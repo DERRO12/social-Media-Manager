@@ -170,6 +170,7 @@ new class extends Component {
                     Live · checked {{ $lastChecked ? \Illuminate\Support\Carbon::parse($lastChecked)->diffForHumans() : 'not yet' }}, automatically every {{ $syncMinutes }} min
                 </span>
             </flux:text>
+            <x-help-video topic="inbox" class="mt-2" />
         </div>
         <div class="flex gap-2">
             <flux:button icon="arrow-path" wire:click="refresh" wire:loading.attr="disabled" wire:target="refresh">

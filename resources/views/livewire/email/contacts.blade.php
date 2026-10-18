@@ -315,6 +315,7 @@ new class extends Component {
 
             <form wire:submit="import" class="flex flex-col gap-3 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
                 <flux:heading>Import emails and phone numbers</flux:heading>
+                <x-help-video topic="contacts_import" class="mt-2" />
                 <flux:text class="text-sm">A CSV with <strong>email</strong> and/or <strong>phone</strong> columns (and optionally <strong>name</strong>). From Excel or Google Sheets: File → Save as / Download → CSV. Local numbers like 0772 123456 are understood.</flux:text>
                 <input type="file" wire:model="csv" accept=".csv,text/csv,text/plain"
                     class="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-700 dark:file:text-white">

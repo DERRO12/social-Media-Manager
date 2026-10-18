@@ -91,6 +91,7 @@ new class extends Component {
         <div>
             <flux:heading size="xl">Insights</flux:heading>
             <flux:text>What works on your accounts: your best days and times to post, and your top posts.</flux:text>
+            <x-help-video topic="insights" class="mt-2" />
         </div>
         <div class="flex flex-wrap gap-2">
             <flux:select wire:model.live="period" class="w-40">

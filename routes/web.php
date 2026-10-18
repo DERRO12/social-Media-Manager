@@ -70,6 +70,7 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
 
     Volt::route('calendar', 'calendar.index')->name('calendar');
     Volt::route('links', 'links.index')->name('links');
+    Volt::route('help', 'help.index')->name('help');
     Volt::route('insights', 'insights.index')->name('insights');
     Route::get('qr/{type}/{link?}', [LinkController::class, 'qr'])->where('type', 'link|page|review')->name('qr');
     Volt::route('email', 'email.campaigns')->name('email.campaigns');
@@ -108,6 +109,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Volt::route('clients/{user}', 'admin.client')->name('client');
     Volt::route('plans', 'admin.plans')->name('plans');
     Volt::route('settings', 'admin.settings')->name('settings');
+    Volt::route('help-videos', 'admin.help')->name('help');
     Volt::route('courses', 'admin.courses')->name('courses');
     Volt::route('courses/{course}', 'admin.course')->name('course');
     Volt::route('certificates', 'admin.certificates')->name('certificates');

@@ -31,6 +31,7 @@
                     @unless (auth()->user()->isAdmin())
                         <flux:navlist.item icon="credit-card" :href="route('billing')" :current="request()->routeIs('billing')" wire:navigate>Plan &amp; billing</flux:navlist.item>
                     @endunless
+                    <flux:navlist.item icon="question-mark-circle" :href="route('help')" :current="request()->routeIs('help')" wire:navigate>Help &amp; tutorials</flux:navlist.item>
                 </flux:navlist.group>
 
                 @if (auth()->user()->isAdmin())
@@ -41,6 +42,7 @@
                         @php($pendingPayments = \App\Models\PaymentClaim::pending()->count())
                         <flux:navlist.item icon="banknotes" :href="route('admin.payments')" :current="request()->routeIs('admin.payments')" :badge="$pendingPayments ?: null" wire:navigate>Payments</flux:navlist.item>
                         <flux:navlist.item icon="book-open" :href="route('admin.courses')" :current="request()->routeIs('admin.courses', 'admin.course', 'admin.certificates')" wire:navigate>Courses</flux:navlist.item>
+                        <flux:navlist.item icon="play-circle" :href="route('admin.help')" :current="request()->routeIs('admin.help')" wire:navigate>Help videos</flux:navlist.item>
                         <flux:navlist.item icon="cog-6-tooth" :href="route('admin.settings')" :current="request()->routeIs('admin.settings')" wire:navigate>Settings</flux:navlist.item>
                     </flux:navlist.group>
                 @endif

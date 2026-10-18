@@ -74,6 +74,7 @@ new class extends Component {
         <div>
             <flux:heading size="xl">Content calendar</flux:heading>
             <flux:text>Your scheduled and published posts, plus days worth posting about. Click a day to plan a post.</flux:text>
+            <x-help-video topic="calendar" class="mt-2" />
         </div>
         <flux:button variant="primary" icon="plus" :href="route('compose')" wire:navigate>Create post</flux:button>
     </div>

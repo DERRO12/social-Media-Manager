@@ -27,7 +27,8 @@ new class extends Component {
             'campaigns' => $user->emailCampaigns()->latest()->paginate(15),
             'subscribers' => $user->contacts()->subscribed()->count(),
             'smsSubscribers' => $user->contacts()->smsSubscribed()->count(),
-            'hasMailbox' => $user->mailbox !== null,
+            'hasMailbox' => \App\Models\Mailbox::forUser($user) !== null,
+            'usingShared' => ! $user->mailbox && \App\Models\Mailbox::forUser($user) !== null,
             'hasSms' => \App\Services\Sms\EgoSms::accountFor($user) !== null,
             'totals' => [
                 'sent' => (int) (clone $sent)->sum('sent'),
@@ -39,6 +40,10 @@ new class extends Component {
 
 <div class="flex flex-col gap-6">
     @include('partials.email-tabs')
+    <div class="mt-2 flex flex-wrap gap-2">
+        <x-help-video topic="email_campaign" class="w-auto" />
+        <x-help-video topic="sms_campaign" class="w-auto" />
+    </div>
 
     @unless ($hasMailbox)
         <flux:callout icon="envelope" color="sky">
@@ -46,6 +51,12 @@ new class extends Component {
             <flux:callout.text>Use your Gmail with an app password. It takes two minutes. <flux:callout.link :href="route('email.settings')" wire:navigate>Connect now</flux:callout.link></flux:callout.text>
         </flux:callout>
     @endunless
+    @if ($usingShared)
+        <flux:callout icon="information-circle" color="zinc">
+            <flux:callout.heading>Emails go out from {{ config('app.name') }}’s mailbox under your name</flux:callout.heading>
+            <flux:callout.text>Replies come to {{ auth()->user()->email }}. Up to {{ \App\Models\Mailbox::sharedPerClient() }} emails a day. For more, and to send from your own address, <flux:callout.link :href="route('email.settings')" wire:navigate>connect your Gmail</flux:callout.link>.</flux:callout.text>
+        </flux:callout>
+    @endif
 
     <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         @foreach ([['Email subscribers', number_format($subscribers), 'envelope'], ['SMS subscribers', number_format($smsSubscribers), 'device-phone-mobile'], ['Messages sent', number_format($totals['sent']), 'paper-airplane'], ['Email open rate', $totals['sent'] ? round(100 * $totals['opens'] / $totals['sent']).'%' : '—', 'eye']] as [$label, $value, $icon])

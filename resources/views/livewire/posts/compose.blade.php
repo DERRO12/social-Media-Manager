@@ -303,6 +303,10 @@ new class extends Component {
     <div>
         <flux:heading size="xl">Create post</flux:heading>
         <flux:text>Upload once, publish everywhere.</flux:text>
+        <div class="mt-2 flex flex-wrap gap-2">
+            <x-help-video topic="create_post" class="w-auto" />
+            <x-help-video topic="ai_writer" class="w-auto" />
+        </div>
     </div>
 
     @if ($accounts->isEmpty())

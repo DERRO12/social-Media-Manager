@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /** One email of a campaign to one contact. */
 class EmailCampaignSend extends Model
 {
-    protected $fillable = ['email_campaign_id', 'contact_id', 'status', 'error', 'cost', 'sent_at', 'opened_at'];
+    protected $fillable = ['email_campaign_id', 'contact_id', 'status', 'error', 'cost', 'shared', 'sent_at', 'opened_at'];
 
     protected function casts(): array
     {

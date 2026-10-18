@@ -68,6 +68,20 @@ new class extends Component {
     public string $mailPassword = '';
     public string $mailFromName = '';
     public bool $requireVerification = false;
+    public $sharedPerClient = 100;
+    public $sharedTotal = 450;
+
+    public function saveSharedLimits(): void
+    {
+        $this->validate([
+            'sharedPerClient' => ['required', 'integer', 'between:0,2000'],
+            'sharedTotal' => ['required', 'integer', 'between:0,10000'],
+        ]);
+
+        Setting::put('mail.shared_per_client', (int) $this->sharedPerClient);
+        Setting::put('mail.shared_daily_total', (int) $this->sharedTotal);
+        $this->dispatch('saved-shared');
+    }
     public ?string $mailResult = null;
     public bool $mailOk = false;
 
@@ -112,6 +126,8 @@ new class extends Component {
         $this->mailUsername = (string) Setting::get('mail.username', '');
         $this->mailFromName = (string) Setting::get('mail.from_name', config('app.name'));
         $this->requireVerification = Setting::get('mail.require_verification') === '1';
+        $this->sharedPerClient = \App\Models\Mailbox::sharedPerClient();
+        $this->sharedTotal = \App\Models\Mailbox::sharedDailyTotal();
 
         $this->smsUsername = (string) Setting::get('sms.username', '');
         $this->smsSenderId = (string) Setting::get('sms.sender_id', '');
@@ -447,6 +463,22 @@ new class extends Component {
             <flux:error name="requireVerification" />
             <x-action-message on="saved-verification">Saved.</x-action-message>
         </div>
+        <flux:separator />
+        <form wire:submit="saveSharedLimits" class="flex flex-col gap-3">
+            <flux:heading>Clients without their own mailbox</flux:heading>
+            <flux:text class="text-sm">
+                Their newsletters go out from this mailbox, with the client’s name as the sender and replies going to the client.
+                Gmail allows about 500 emails a day in total (2,000 with Workspace), so keep the total below that; password resets and other site emails need room too.
+            </flux:text>
+            <div class="grid gap-4 sm:grid-cols-2">
+                <flux:input wire:model="sharedPerClient" type="number" min="0" max="2000" label="Emails per client per day" description="0 = clients must connect their own mailbox." />
+                <flux:input wire:model="sharedTotal" type="number" min="0" max="10000" label="All clients together, per day" />
+            </div>
+            <div class="flex items-center gap-3">
+                <flux:button type="submit">Save limits</flux:button>
+                <x-action-message on="saved-shared">Saved.</x-action-message>
+            </div>
+        </form>
     </section>
 
     {{-- SMS --}}

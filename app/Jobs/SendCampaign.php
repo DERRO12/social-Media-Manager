@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Mail\CampaignMail;
 use App\Models\EmailCampaign;
 use App\Models\EmailCampaignSend;
+use App\Models\Mailbox;
 use App\Services\Mail\Smtp;
 use App\Services\Sms\EgoSms;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,16 +42,19 @@ class SendCampaign implements ShouldQueue
             return;
         }
 
-        $mailbox = $campaign->user->mailbox;
+        // The client's own mailbox, or the admin's shared one.
+        $mailbox = Mailbox::forUser($campaign->user);
         if (! $mailbox) {
-            $campaign->update(['status' => 'failed', 'error' => 'The mailbox was disconnected. Reconnect it and press Resume.']);
+            $campaign->update(['status' => 'paused', 'error' => 'No mailbox to send from. Connect your mailbox and press Resume.']);
 
             return;
         }
 
-        $allowance = max(0, $mailbox->daily_limit - $mailbox->sentToday());
+        $allowance = $mailbox->remainingToday();
         if ($allowance === 0) {
-            $campaign->update(['error' => 'Daily sending limit reached. The rest go out tomorrow.']);
+            $campaign->update(['error' => $mailbox->shared
+                ? 'Today’s limit on the shared mailbox is reached. The rest go out tomorrow (connect your own Gmail to send more).'
+                : 'Daily sending limit reached. The rest go out tomorrow.']);
 
             // (The "sync" queue can't wait, so it would loop; a real queue continues after midnight.)
             if (config('queue.default') !== 'sync') {
@@ -60,7 +64,7 @@ class SendCampaign implements ShouldQueue
             return;
         }
 
-        $mailer = Smtp::mailer('mailbox-'.$mailbox->id, $mailbox->mailerConfig());
+        $mailer = Smtp::mailer($mailbox->mailerName(), $mailbox->mailerConfig());
         $sends = $campaign->sends()->where('status', 'pending')->with('contact')->limit(min(self::BATCH, $allowance))->get();
 
         foreach ($sends as $send) {
@@ -72,7 +76,7 @@ class SendCampaign implements ShouldQueue
 
             try {
                 $mailer->to($send->contact->email, $send->contact->name)->send(new CampaignMail($campaign, $send->contact, $mailbox, $send));
-                $send->update(['status' => 'sent', 'sent_at' => now()]);
+                $send->update(['status' => 'sent', 'sent_at' => now(), 'shared' => $mailbox->shared]);
             } catch (Throwable $e) {
                 $reason = Smtp::explain($e);
                 $send->update(['status' => 'failed', 'error' => mb_substr($reason, 0, 250)]);
