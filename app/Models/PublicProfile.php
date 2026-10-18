@@ -4,7 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * A client's opt-in public page on this site (/p/{handle}) listing their videos and posts, with
@@ -15,11 +18,11 @@ class PublicProfile extends Model
     /** Handles that would clash with app pages or look official. */
     public const RESERVED = ['admin', 'api', 'app', 'login', 'register', 'support', 'help', 'about', 'www', 'mail', 'root', 'socialhub', 'gokatale'];
 
-    protected $fillable = ['handle', 'display_name', 'headline', 'bio', 'location', 'website', 'is_public'];
+    protected $fillable = ['handle', 'display_name', 'headline', 'bio', 'location', 'website', 'is_public', 'seo_title', 'seo_description', 'avatar_path', 'show_business', 'newsletter_enabled', 'newsletter_text'];
 
     protected function casts(): array
     {
-        return ['is_public' => 'boolean'];
+        return ['is_public' => 'boolean', 'show_business' => 'boolean', 'newsletter_enabled' => 'boolean'];
     }
 
     public function getRouteKeyName(): string
@@ -37,8 +40,40 @@ class PublicProfile extends Model
     {
         return $this->hasManyThrough(ContentItem::class, SocialAccount::class, 'user_id', 'social_account_id', 'user_id', 'id')
             ->where('content_items.hidden_from_profile', false)
+            ->where('content_items.type', '!=', 'business') // a Google Business review summary, not a post
             ->whereNotNull('content_items.permalink')
             ->latest('content_items.published_at');
+    }
+
+    /** Photos uploaded for the page and shown publicly. */
+    public function photos(): HasMany
+    {
+        return $this->hasMany(ProfilePhoto::class, 'user_id', 'user_id')->visible();
+    }
+
+    /** The page picture: uploaded logo/photo, else a connected account's picture. */
+    public function avatarUrl(): ?string
+    {
+        return $this->avatar_path
+            ? Storage::disk('public')->url($this->avatar_path)
+            : $this->user->socialAccounts->firstWhere('avatar_url', '!=', null)?->avatar_url;
+    }
+
+    /** The business details to show, if the owner turned that on and has filled them in. */
+    public function business(): ?BusinessProfile
+    {
+        return $this->show_business ? $this->user->businessProfile : null;
+    }
+
+    /** The title Google shows: the owner's own, or name + headline. */
+    public function searchTitle(): string
+    {
+        return $this->seo_title ?: $this->name().($this->headline ? ': '.$this->headline : '');
+    }
+
+    public function searchDescription(): string
+    {
+        return $this->seo_description ?: ($this->headline ?: Str::limit((string) $this->bio, 155)) ?: 'Videos, posts and photos by '.$this->name().'.';
     }
 
     public function url(): string

@@ -93,7 +93,7 @@ class Academy
             return $existing;
         }
 
-        return Certificate::create([
+        $certificate = Certificate::create([
             'code' => Certificate::newCode(),
             'user_id' => $user->id,
             'course_id' => $course->id,
@@ -102,5 +102,9 @@ class Academy
             'score' => $score,
             'issued_at' => now(),
         ]);
+
+        rescue(fn () => $user->notify(new \App\Notifications\CertificateEarned($certificate)));
+
+        return $certificate;
     }
 }

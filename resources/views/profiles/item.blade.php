@@ -16,7 +16,7 @@
             'uploadDate' => $item->published_at->toIso8601String(),
             'embedUrl' => $embedUrl,
             'url' => $item->permalink,
-            'author' => ['@type' => 'Person', 'name' => $name, 'url' => $profile->url()],
+            'author' => \App\Support\ProfileSchema::entity($profile, full: false),
             'interactionStatistic' => $item->views !== null ? [
                 '@type' => 'InteractionCounter',
                 'interactionType' => ['@type' => 'WatchAction'],
@@ -31,13 +31,15 @@
             'datePublished' => $item->published_at?->toIso8601String(),
             'image' => $item->thumbnail_url,
             'url' => $item->permalink,
-            'author' => ['@type' => 'Person', 'name' => $name, 'url' => $profile->url()],
+            'author' => \App\Support\ProfileSchema::entity($profile, full: false),
         ]);
 @endphp
 
 <x-layouts.public :title="$title.' | '.$name" :description="$description">
     <x-slot:head>
         <link rel="canonical" href="{{ $url }}">
+        <meta name="robots" content="index, follow, max-image-preview:large, max-video-preview:-1">
+        <meta name="twitter:card" content="summary_large_image">
         <meta property="og:type" content="{{ $isVideo ? 'video.other' : 'article' }}">
         <meta property="og:title" content="{{ $title }}">
         <meta property="og:description" content="{{ $description }}">

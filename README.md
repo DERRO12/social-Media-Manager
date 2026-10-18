@@ -53,12 +53,24 @@ Passing awards a certificate with a public verification page (`/certificates/COD
 
 | Page | What it does |
 |---|---|
-| **Business Profile** | Builds a Google Business Profile step by step: category, keywords, services, hours, a ready-to-paste description (max 750 characters), a strength score, a Google-style preview, a setup checklist and a review link from the Place ID. Google has no API to create profiles, so the client copies the details into business.google.com. |
+| **Business Profile** | Builds a Google Business Profile step by step: category, keywords, services, hours, a ready-to-paste description (max 750 characters), a strength score, a Google-style preview, a setup checklist and a review link. With **Google Business Profile connected** (Connected accounts), the client creates the business on Google Maps from these details in one click (Google category search included), sends later changes to Google, and gets the Place ID and review link automatically. Verification still happens on Google (video, phone, email or postcard). |
 | **SEO checker** | Checks any public website for 15 basics (title, description, headings, mobile, HTTPS, indexing, canonical, image alt text, social tags, structured data, speed, robots.txt, sitemap) and explains each fix. 10 checks per hour per client. It only fetches public internet addresses (private, local and cloud-metadata IPs are blocked, redirects included). |
-| **Public page** | A page at `/p/handle` listing the client's posts, plus one page per video (`/p/handle/v/…`) with structured data (VideoObject, ProfilePage) so Google can show them in search. Clients choose the handle, turn the page on or off and hide single posts. Pages disappear when the plan ends. |
+| **Public page** | A page at `/p/handle` listing the client's posts and photos, plus one page per video (`/p/handle/v/…`) with structured data (VideoObject, ProfilePage) so Google can show them in search. Clients set the handle, their own Google title and description (with a live Google preview), a logo, and can show their business details (services, hours, address, call/book/directions buttons, review link) marked up as a LocalBusiness. One-click links to Google's Rich Results Test, PageSpeed, `site:` search and Facebook's sharing preview. Pages disappear when the plan ends. |
+| **Photos** | Clients upload photos (up to 300) for Google Images. Each is resized to 2000px plus a 640px thumbnail (WebP), given a search-friendly file name, and stripped of GPS and camera data. Each photo gets its own page (`/p/handle/photos/…`) with ImageObject data, breadcrumbs, large-image tags and an image sitemap entry. A per-photo score (title, alt text, caption, keywords, location, size) says what to improve. |
 
-`/sitemap.xml` lists the public pages, courses and every live public page with its posts; `/robots.txt` points
-to it and keeps private areas out of search. Submit `https://YOUR-DOMAIN/sitemap.xml` in Google Search Console.
+`/sitemap.xml` lists the public pages, courses and every live public page with its posts and photos (image sitemap);
+`/robots.txt` points to it and keeps private areas out of search. Submit `https://YOUR-DOMAIN/sitemap.xml` in Google
+Search Console. In production, new and changed public pages are also sent to **IndexNow** (Bing, Yandex and others;
+key file at `/indexnow.txt`; turn off with `INDEXNOW_ENABLED=false`).
+
+## Email
+
+| Where | What it does |
+|---|---|
+| **Admin → Settings → Email** | Connect the site's mailbox: Gmail / Google Workspace with an **app password** (step-by-step help on the page), Outlook, Zoho or any SMTP server, with a "send test email" button. It sends password resets, email confirmation (optional switch "New sign-ups must confirm their email", existing users are never locked out), welcome emails, a new sign-up alert to admins, trial-ending and plan-ended emails, payment updates, failed post alerts and certificates. |
+| **Email marketing → Mailbox & sign-up form** | Each client connects **their own** Gmail (app password) so newsletters come from their address, sets a daily limit (Gmail: about 500 a day) and turns on a sign-up form on their public page. |
+| **Email marketing → Contacts** | Add people (with a consent tick), import a CSV from Excel or Google Sheets, tag them, export, unsubscribe or delete. Up to 5,000 contacts per client. |
+| **Email marketing → Campaigns** | Templates (monthly news, offer, new video), a simple editor (bold, headings, links, images, `{first_name}`), live preview, test send, send now or schedule, send to everyone or one tag. Sending runs in the background, paced and capped at the mailbox's daily limit (it continues the next day), pauses with a clear message if the password stops working, and shows delivered, opened and failed. Every email has an unsubscribe link and Gmail's one-click unsubscribe headers. |
 
 ## What a client can do
 
@@ -72,7 +84,8 @@ to it and keeps private areas out of search. Submit `https://YOUR-DOMAIN/sitemap
 | **Connected accounts** | Step-by-step guide; connect / reconnect / sync / disconnect YouTube, Facebook Pages, Instagram, TikTok, LinkedIn, X |
 | **Trending** | Live YouTube trending videos and music by country, plus official trend links for TikTok, Instagram, X, Facebook |
 | **Academy** | Social media marketing courses, quizzes and certificates |
-| **Grow on Google** | Business Profile builder, SEO checker, public page that shows their posts on Google |
+| **Grow on Google** | Business Profile builder (and creating it on Google), public page, photos for Google Images, SEO checker |
+| **Email marketing** | Their own mailbox, a sign-up form, contacts and newsletter campaigns |
 | **Plan & billing** | Current plan, trial days left, usage against limits, pay by card, PayPal or Mobile Money, payment history |
 
 On phones the app has a bottom tab bar (Home, Create, Inbox, Content, Learn) and the full menu behind the ☰ button.
@@ -91,6 +104,10 @@ That is the only method the platforms allow.
 | TikTok | ✅ | ✅ counts only | ❌ not offered by TikTok's API | ❌ |
 | LinkedIn (profile) | ✅ | needs Community Management approval | needs approval | needs approval |
 | X | ✅ | ✅ | ✅ | ✅ (all need a paid X API tier) |
+| Google Business Profile | – | ✅ rating and review count | ✅ Google reviews in the inbox | ✅ (one public reply per review) |
+
+Google Business Profile uses the same Google Cloud app as YouTube, but Google must first approve the project for the
+Business Profile APIs (request form linked in Admin → Settings → Google). Until then, connecting shows a clear message.
 
 ## Running locally (XAMPP)
 
@@ -166,7 +183,7 @@ TikTok audit, LinkedIn product approval). Plan for this early. It usually takes 
 - **Queue worker** kept running with Supervisor (or Laravel Forge / Cloud), using `--timeout=3600` for big uploads.
 - **Cron:** `* * * * * php /path/to/artisan schedule:run`.
 - **File storage:** move videos to S3 (`FILESYSTEM_DISK`) when you have many clients.
-- Set `APP_ENV=production`, `APP_DEBUG=false`, and real mail settings so password resets work.
+- Set `APP_ENV=production`, `APP_DEBUG=false`, and connect a mailbox in **Admin → Settings → Email** so password resets and other emails are sent.
 
 ## Code map
 
@@ -179,7 +196,9 @@ TikTok audit, LinkedIn product approval). Plan for this early. It usually takes 
 - `app/Services/Billing/StripeBilling.php`, `app/Http/Controllers/StripeWebhookController.php` — optional Stripe payments
 - `app/Models/Setting.php` — admin-editable settings (secrets encrypted)
 - `app/Services/Academy/*`, `resources/academy/*.php` — course progress, certificates and the ready-made course library
-- `app/Services/Seo/*`, `app/Http/Controllers/PublicProfileController.php` — SEO checker (safe fetching), public pages, sitemap, robots.txt
+- `app/Services/Seo/*`, `app/Http/Controllers/PublicProfileController.php`, `app/Support/ProfileSchema.php` — SEO checker (safe fetching), photo optimisation, public pages, structured data, sitemap, robots.txt, IndexNow
+- `app/Services/Mail/*`, `app/Jobs/SendCampaign.php`, `app/Http/Controllers/NewsletterController.php` — site email settings, client mailboxes, campaigns, sign-up form, unsubscribe and opens
+- `app/Services/Social/Drivers/GoogleBusinessDriver.php` — Google Business Profile: locations, reviews, replies, creating and updating the listing
 - `tests/Feature/*` — client isolation, publishing, billing and limits tests (`php artisan test`)
 
 Social access tokens and secrets saved in Admin → Settings are encrypted with `APP_KEY`.

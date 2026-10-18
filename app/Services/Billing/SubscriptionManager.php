@@ -127,7 +127,9 @@ class SubscriptionManager
         Subscription::whereIn('status', [SubscriptionStatus::Trialing, SubscriptionStatus::Active, SubscriptionStatus::PastDue, SubscriptionStatus::Canceled])
             ->each(function (Subscription $sub) use (&$count) {
                 if (! $sub->isValid()) {
+                    $wasTrial = $sub->status === SubscriptionStatus::Trialing;
                     $sub->update(['status' => SubscriptionStatus::Expired]);
+                    rescue(fn () => $sub->user?->notify(new \App\Notifications\PlanExpired($wasTrial)));
                     $count++;
                 }
             });

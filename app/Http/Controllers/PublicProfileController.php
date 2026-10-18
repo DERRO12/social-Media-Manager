@@ -5,14 +5,16 @@ namespace App\Http\Controllers;
 use App\Enums\Platform;
 use App\Models\ContentItem;
 use App\Models\Course;
+use App\Models\ProfilePhoto;
 use App\Models\PublicProfile;
+use App\Services\Seo\IndexNow;
 use App\Support\YouTube;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
-/** Public creator pages, per-video pages, the sitemap and robots.txt: what lets search engines find content. */
+/** Public creator pages, per-video and per-photo pages, the sitemap and robots.txt: what lets search engines find content. */
 class PublicProfileController extends Controller
 {
     public function show(Request $request, PublicProfile $profile): View
@@ -20,8 +22,27 @@ class PublicProfileController extends Controller
         $this->ensureVisible($request, $profile);
 
         return view('profiles.show', [
-            'profile' => $profile->load('user.socialAccounts'),
+            'profile' => $profile->load('user.socialAccounts', 'user.businessProfile'),
             'items' => $profile->items()->with('account')->paginate(24),
+            'photos' => $request->integer('page', 1) > 1 ? collect() : $profile->photos()->limit(24)->get(),
+        ]);
+    }
+
+    public function photo(Request $request, PublicProfile $profile, ProfilePhoto $photo, ?string $slug = null): View|\Illuminate\Http\RedirectResponse
+    {
+        $this->ensureVisible($request, $profile);
+        abort_unless($photo->user_id === $profile->user_id && $photo->is_public, 404);
+
+        if ($slug !== $photo->slug()) {
+            return redirect()->to($photo->pageUrl($profile), 301);
+        }
+
+        $profile->load('user.socialAccounts', 'user.businessProfile');
+
+        return view('profiles.photo', [
+            'profile' => $profile,
+            'photo' => $photo,
+            'more' => $profile->photos()->where('id', '!=', $photo->id)->limit(8)->get(),
         ]);
     }
 
@@ -62,8 +83,23 @@ class PublicProfileController extends Controller
             $urls->push(['loc' => route('courses.show', $course), 'lastmod' => $course->updated_at, 'priority' => '0.7']);
         }
 
-        foreach (PublicProfile::where('is_public', true)->with('user.subscription')->get()->filter(fn ($p) => self::isLive($p)) as $profile) {
-            $urls->push(['loc' => $profile->url(), 'lastmod' => $profile->updated_at, 'priority' => '0.6']);
+        foreach (PublicProfile::where('is_public', true)->with('user.subscription', 'user.socialAccounts')->get()->filter(fn ($p) => self::isLive($p)) as $profile) {
+            $photos = $profile->photos()->limit(1000)->get();
+
+            // Image sitemap entries: Google Images finds photos through the pages that show them.
+            $urls->push([
+                'loc' => $profile->url(),
+                'lastmod' => max($profile->updated_at, $photos->max('updated_at') ?? $profile->updated_at),
+                'priority' => '0.6',
+                'images' => array_values(array_filter([
+                    $profile->avatar_path ? $profile->avatarUrl() : null,
+                    ...$photos->take(24)->map->url(),
+                ])),
+            ]);
+
+            foreach ($photos as $photo) {
+                $urls->push(['loc' => $photo->pageUrl($profile), 'lastmod' => $photo->updated_at, 'priority' => '0.5', 'images' => [$photo->url()]]);
+            }
 
             foreach ($profile->items()->with('account')->limit(500)->get() as $item) {
                 $urls->push([
@@ -92,6 +128,14 @@ class PublicProfileController extends Controller
         ];
 
         return response(implode("\n", $lines)."\n", 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+    }
+
+    /** The IndexNow key file search engines read to check that submissions come from this site. */
+    public function indexNowKey(IndexNow $indexNow): Response
+    {
+        abort_unless($indexNow->enabled(), 404);
+
+        return response($indexNow->key(), 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
     }
 
     /** Only public pages are visible, except to their owner (for previewing) and the admin. */

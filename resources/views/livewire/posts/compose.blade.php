@@ -86,7 +86,7 @@ new class extends Component {
     public function save(): void
     {
         $user = auth()->user();
-        $selected = $user->socialAccounts()->whereIn('id', $this->accountIds)->get();
+        $selected = $user->socialAccounts()->whereIn('platform', Platform::publishable())->whereIn('id', $this->accountIds)->get();
         $needsVideo = $selected->contains(fn ($a) => in_array($a->platform, self::VIDEO_ONLY, true));
 
         $this->validate([
@@ -202,14 +202,14 @@ new class extends Component {
 
     public function toggleAll(): void
     {
-        $all = auth()->user()->socialAccounts()->pluck('id')->map(fn ($id) => (string) $id)->all();
+        $all = auth()->user()->socialAccounts()->whereIn('platform', Platform::publishable())->pluck('id')->map(fn ($id) => (string) $id)->all();
 
         $this->accountIds = count($this->accountIds) === count($all) ? [] : $all;
     }
 
     public function with(): array
     {
-        $accounts = auth()->user()->socialAccounts()->orderBy('platform')->get();
+        $accounts = auth()->user()->socialAccounts()->whereIn('platform', Platform::publishable())->orderBy('platform')->get();
         $selected = $accounts->whereIn('id', $this->accountIds);
         $selectedPlatforms = $selected->pluck('platform')->unique();
 

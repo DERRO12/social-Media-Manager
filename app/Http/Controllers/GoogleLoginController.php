@@ -93,6 +93,8 @@ class GoogleLoginController extends Controller
             $user = $existing;
         }
 
+        $isNew = ! $user;
+
         if (! $user) {
             $user = User::create([
                 'name' => $profile['name'] ?? Str::before($profile['email'], '@'),
@@ -107,6 +109,10 @@ class GoogleLoginController extends Controller
             'avatar_url' => $profile['picture'] ?? $user->avatar_url,
             'email_verified_at' => $user->email_verified_at ?? ($verified ? now() : null),
         ])->save();
+
+        if ($isNew) {
+            event(new \Illuminate\Auth\Events\Registered($user));
+        }
 
         if ($user->isSuspended()) {
             return $this->fail('Your account has been suspended. Please contact support.');

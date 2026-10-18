@@ -1,6 +1,9 @@
 <?php
 
+use App\Enums\Platform;
 use App\Models\BusinessProfile;
+use App\Models\SocialAccount;
+use App\Services\Social\PlatformException;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -20,6 +23,17 @@ new class extends Component {
     public array $hours = [];
     public array $checklist = [];
 
+    /** Creating / updating the real listing on Google (needs a connected Google Business Profile). */
+    public const REGIONS = ['UG' => 'Uganda', 'KE' => 'Kenya', 'TZ' => 'Tanzania', 'RW' => 'Rwanda', 'NG' => 'Nigeria', 'GH' => 'Ghana', 'ZA' => 'South Africa',
+        'ZM' => 'Zambia', 'ET' => 'Ethiopia', 'CM' => 'Cameroon', 'GB' => 'United Kingdom', 'US' => 'United States', 'CA' => 'Canada', 'AE' => 'United Arab Emirates', 'IN' => 'India'];
+    public ?int $googleAccountId = null;
+    public string $region = 'UG';
+    public string $categorySearch = '';
+    public array $categoryOptions = [];
+    public string $googleCategory = '';
+    public ?string $googleMessage = null;
+    public bool $googleOk = true;
+
     public function mount(): void
     {
         $p = auth()->user()->businessProfile;
@@ -34,9 +48,11 @@ new class extends Component {
         $this->phone = (string) $p?->phone;
         $this->website = (string) $p?->website;
         $this->bookingUrl = (string) $p?->booking_url;
+
+        // Once Google knows the business, its Place ID (for the review link) comes from there.
+        $this->placeId = (string) ($p?->place_id ?: auth()->user()->socialAccounts()->where('platform', Platform::GoogleBusiness)->get()->pluck('meta.place_id')->filter()->first());
         $this->description = (string) $p?->description;
         $this->services = implode("\n", $p?->services ?? []);
-        $this->placeId = (string) $p?->place_id;
         $this->checklist = $p?->checklist ?? [];
 
         foreach (BusinessProfile::DAYS as $day) {
@@ -92,6 +108,67 @@ new class extends Component {
         $this->dispatch('saved');
     }
 
+    private function googleAccount(): SocialAccount
+    {
+        return auth()->user()->socialAccounts()->where('platform', Platform::GoogleBusiness)->findOrFail($this->googleAccountId);
+    }
+
+    public function searchCategories(): void
+    {
+        $this->validate(['categorySearch' => ['required', 'string', 'min:2', 'max:60']]);
+        $account = $this->googleAccount();
+
+        try {
+            $this->categoryOptions = $account->driver()->categories($account, $this->categorySearch, $this->region);
+            $this->googleCategory = $this->categoryOptions[0]['name'] ?? '';
+            $this->googleMessage = $this->categoryOptions ? null : 'No Google category matches that. Try a simpler word, like “salon” or “restaurant”.';
+            $this->googleOk = (bool) $this->categoryOptions;
+        } catch (PlatformException $e) {
+            [$this->googleOk, $this->googleMessage] = [false, $e->getMessage()];
+        }
+    }
+
+    public function createOnGoogle(): void
+    {
+        $this->save();
+        $account = $this->googleAccount();
+        abort_if($account->meta['location'] ?? null, 403);
+
+        $this->validate([
+            'name' => ['required'],
+            'address' => ['required'],
+            'city' => ['required'],
+            'googleCategory' => ['required', 'starts_with:categories/'],
+            'region' => ['required', 'in:'.implode(',', array_keys(self::REGIONS))],
+        ], [
+            'address.required' => 'Google needs a street address to put the business on the map.',
+            'googleCategory.required' => 'Search and choose your Google category.',
+        ]);
+
+        try {
+            $account->driver()->createLocation($account, auth()->user()->businessProfile()->firstOrFail(), $this->googleCategory, $this->region);
+            $this->checklist['created'] = true;
+            auth()->user()->businessProfile()->update(['checklist' => $this->checklist]);
+            [$this->googleOk, $this->googleMessage] = [true, 'Your business was created on Google. Next, verify it so it appears on Maps.'];
+        } catch (PlatformException $e) {
+            [$this->googleOk, $this->googleMessage] = [false, $e->getMessage()];
+        }
+    }
+
+    public function pushToGoogle(): void
+    {
+        $this->save();
+        $account = $this->googleAccount();
+        abort_unless($account->meta['location'] ?? null, 403);
+
+        try {
+            $account->driver()->updateLocation($account, auth()->user()->businessProfile()->firstOrFail(), $this->region);
+            [$this->googleOk, $this->googleMessage] = [true, 'Google has your latest details. Changes can take a few minutes to show (Google may review some).'];
+        } catch (PlatformException $e) {
+            [$this->googleOk, $this->googleMessage] = [false, $e->getMessage()];
+        }
+    }
+
     public function draft(): void
     {
         $profile = new BusinessProfile($this->attributes());
@@ -109,7 +186,16 @@ new class extends Component {
     {
         $profile = new BusinessProfile($this->attributes());
 
+        $googleAccounts = auth()->user()->socialAccounts()->where('platform', Platform::GoogleBusiness)->orderBy('name')->get();
+        if (! $googleAccounts->contains('id', $this->googleAccountId)) {
+            $this->googleAccountId = $googleAccounts->first()?->id;
+        }
+        $google = $googleAccounts->firstWhere('id', $this->googleAccountId);
+
         return [
+            'googleAccounts' => $googleAccounts,
+            'google' => $google,
+            'reviewsItem' => $google ? $google->contentItems()->where('type', 'business')->first() : null,
             'completeness' => $profile->completeness(),
             'reviewUrl' => $profile->reviewUrl(),
             'days' => BusinessProfile::DAYS,
@@ -194,6 +280,75 @@ new class extends Component {
         </form>
 
         <aside class="flex flex-col gap-4 xl:sticky xl:top-6 xl:self-start">
+            <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+                <div class="flex items-center justify-between gap-2">
+                    <flux:heading>On Google</flux:heading>
+                    @if ($google && ($google->meta['location'] ?? null))
+                        <flux:badge size="sm" :color="($google->meta['verified'] ?? false) ? 'green' : 'amber'">{{ ($google->meta['verified'] ?? false) ? 'Verified' : 'Not verified yet' }}</flux:badge>
+                    @endif
+                </div>
+
+                @if ($googleAccounts->isEmpty())
+                    <flux:text class="mt-1 text-sm">Connect your Google Business Profile to create the business on Google Maps from these details, keep it updated, and answer Google reviews in your inbox.</flux:text>
+                    <flux:button class="mt-3 w-full" variant="primary" icon="link" :href="route('accounts.connect', Platform::GoogleBusiness)">Connect Google Business Profile</flux:button>
+                @else
+                    @if ($googleAccounts->count() > 1)
+                        <flux:select wire:model.live="googleAccountId" class="mt-3" size="sm">
+                            @foreach ($googleAccounts as $a)
+                                <option value="{{ $a->id }}">{{ $a->name }}</option>
+                            @endforeach
+                        </flux:select>
+                    @endif
+
+                    @if ($google->meta['location'] ?? null)
+                        <div class="mt-3 text-sm font-medium">{{ $google->name }}</div>
+                        @if ($reviewsItem)
+                            <flux:text class="text-sm">{{ $reviewsItem->caption }}</flux:text>
+                        @endif
+                        <div class="mt-3 flex flex-wrap gap-2">
+                            <flux:button size="sm" variant="primary" icon="arrow-up-on-square" wire:click="pushToGoogle">Send these details to Google</flux:button>
+                            <flux:button size="sm" icon="chat-bubble-left-right" :href="route('inbox', ['platform' => 'google_business'])" wire:navigate>Reviews in inbox</flux:button>
+                            @if ($google->meta['maps_url'] ?? null)
+                                <flux:button size="sm" variant="ghost" icon="map" :href="$google->meta['maps_url']" target="_blank">Maps</flux:button>
+                            @endif
+                        </div>
+                        @unless ($google->meta['verified'] ?? false)
+                            <flux:text class="mt-3 text-xs">Google shows the business on Maps after you verify it (video, phone, email or postcard). <a href="https://business.google.com/locations" target="_blank" rel="noopener" class="underline">Verify on Google</a></flux:text>
+                        @endunless
+                    @else
+                        <flux:text class="mt-2 text-sm">Create the business on Google from the details on this page. Save your address, city and phone first.</flux:text>
+                        <div class="mt-3 flex flex-col gap-3">
+                            <flux:select wire:model="region" label="Country" size="sm">
+                                @foreach ($this::REGIONS as $code => $label)
+                                    <option value="{{ $code }}">{{ $label }}</option>
+                                @endforeach
+                            </flux:select>
+                            <div class="flex items-end gap-2">
+                                <flux:input wire:model="categorySearch" wire:keydown.enter.prevent="searchCategories" label="Google category" size="sm" :placeholder="$primaryCategory ?: 'e.g. hair salon'" class="flex-1" />
+                                <flux:button size="sm" wire:click="searchCategories" icon="magnifying-glass" aria-label="Search categories" />
+                            </div>
+                            <flux:error name="categorySearch" />
+                            @if ($categoryOptions)
+                                <flux:select wire:model="googleCategory" size="sm">
+                                    @foreach ($categoryOptions as $c)
+                                        <option value="{{ $c['name'] }}">{{ $c['label'] }}</option>
+                                    @endforeach
+                                </flux:select>
+                            @endif
+                            @foreach (['googleCategory', 'address', 'city', 'name'] as $field)
+                                <flux:error :name="$field" />
+                            @endforeach
+                            <flux:button variant="primary" icon="plus" wire:click="createOnGoogle" wire:confirm="Create this business on Google with the details on this page?">Create on Google</flux:button>
+                        </div>
+                    @endif
+                @endif
+
+                @if ($googleMessage)
+                    <flux:callout class="mt-3" :variant="$googleOk ? 'success' : 'danger'" :heading="$googleMessage" />
+                @endif
+                <div wire:loading wire:target="createOnGoogle,pushToGoogle,searchCategories" class="mt-2 text-xs text-zinc-500">Talking to Google…</div>
+            </div>
+
             <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
                 <div class="flex items-end justify-between">
                     <flux:heading>Profile strength</flux:heading>

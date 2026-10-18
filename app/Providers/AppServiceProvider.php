@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Listeners\SendSignupEmails;
+use App\Services\Mail\SiteMail;
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\ServiceProvider;
 
@@ -24,5 +28,10 @@ class AppServiceProvider extends ServiceProvider
         if ($proxies = config('app.trusted_proxies')) {
             TrustProxies::at($proxies === '*' ? '*' : array_map('trim', explode(',', $proxies)));
         }
+
+        // Send the site's emails through the mailbox set in Admin → Settings → Email (e.g. Gmail + app password).
+        SiteMail::apply();
+
+        Event::listen(Registered::class, SendSignupEmails::class);
     }
 }

@@ -18,7 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         // Stripe signs its webhooks instead of sending a CSRF token.
-        $middleware->validateCsrfTokens(except: ['stripe/webhook']);
+        // Mail apps' one-click unsubscribe (RFC 8058) posts without a CSRF token.
+        $middleware->validateCsrfTokens(except: ['stripe/webhook', 'unsubscribe/*']);
         // Trusted proxies (TRUSTED_PROXIES) are applied in AppServiceProvider so they also work with config:cache.
     })
     ->withExceptions(function (Exceptions $exceptions) {

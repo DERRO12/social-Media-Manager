@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Enums\PostStatus;
 use App\Services\Billing\SubscriptionManager;
+use App\Services\Mail\SiteMail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -16,7 +17,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
-class User extends Authenticatable // implements MustVerifyEmail
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
@@ -86,7 +87,22 @@ class User extends Authenticatable // implements MustVerifyEmail
             $user->media->groupBy('disk')->each(function ($files, $disk) {
                 Storage::disk($disk)->delete($files->pluck('path')->all());
             });
+
+            // Public page photos and the page picture are files too.
+            $user->photos->each->delete();
+            if ($user->publicProfile?->avatar_path) {
+                Storage::disk('public')->delete($user->publicProfile->avatar_path);
+            }
         });
+    }
+
+    /**
+     * Email confirmation is only enforced when the admin turns it on (Admin → Settings → Email) and email
+     * sending works; otherwise everyone counts as confirmed, so nobody gets locked out.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return $this->email_verified_at !== null || ! SiteMail::requiresVerification();
     }
 
     public function isAdmin(): bool
@@ -127,6 +143,26 @@ class User extends Authenticatable // implements MustVerifyEmail
     public function seoAudits(): HasMany
     {
         return $this->hasMany(SeoAudit::class);
+    }
+
+    public function photos(): HasMany
+    {
+        return $this->hasMany(ProfilePhoto::class);
+    }
+
+    public function mailbox(): HasOne
+    {
+        return $this->hasOne(Mailbox::class);
+    }
+
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(Contact::class);
+    }
+
+    public function emailCampaigns(): HasMany
+    {
+        return $this->hasMany(EmailCampaign::class);
     }
 
     public function completedLessonIds(): array

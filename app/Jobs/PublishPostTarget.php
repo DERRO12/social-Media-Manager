@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Enums\TargetStatus;
 use App\Models\PostTarget;
+use App\Notifications\PostFailed;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -40,6 +41,7 @@ class PublishPostTarget implements ShouldQueue
                 'status' => TargetStatus::Failed,
                 'error' => mb_substr($e->getMessage(), 0, 2000),
             ]);
+            $this->tellOwner($target);
         }
 
         $target->post->refreshStatus();
@@ -52,7 +54,18 @@ class PublishPostTarget implements ShouldQueue
             'status' => TargetStatus::Failed,
             'error' => $e ? mb_substr($e->getMessage(), 0, 2000) : 'The publish job stopped unexpectedly.',
         ]);
+        $this->tellOwner($this->target);
 
         $this->target->post->refreshStatus();
+    }
+
+    /** Email the client about the first platform a post failed on (not one email per platform or retry). */
+    private function tellOwner(PostTarget $target): void
+    {
+        $otherFailures = $target->post->targets()->where('status', TargetStatus::Failed)->whereKeyNot($target->id)->exists();
+
+        if (! $otherFailures && ($owner = $target->account?->user)) {
+            rescue(fn () => $owner->notify(new PostFailed($target->load('post', 'account'))));
+        }
     }
 }

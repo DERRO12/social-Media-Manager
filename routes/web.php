@@ -5,6 +5,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ChunkedUploadController;
 use App\Http\Controllers\GoogleLoginController;
 use App\Http\Controllers\ImpersonationController;
+use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\StripeWebhookController;
@@ -30,11 +31,20 @@ Route::get('courses', [AcademyPublicController::class, 'index'])->name('courses.
 Route::get('courses/{course:slug}', [AcademyPublicController::class, 'show'])->name('courses.show');
 Route::get('certificates/{certificate:code}', [AcademyPublicController::class, 'certificate'])->name('certificates.show');
 
-// Search visibility: clients' public pages, a page per video, the sitemap and robots.txt.
+// Search visibility: clients' public pages, a page per video and per photo, the sitemap, robots.txt and the IndexNow key.
 Route::get('p/{profile:handle}', [PublicProfileController::class, 'show'])->name('profiles.show');
 Route::get('p/{profile:handle}/v/{item}/{slug?}', [PublicProfileController::class, 'item'])->name('profiles.item');
+Route::get('p/{profile:handle}/photos/{photo}/{slug?}', [PublicProfileController::class, 'photo'])->name('profiles.photo');
 Route::get('sitemap.xml', [PublicProfileController::class, 'sitemap'])->name('sitemap');
 Route::get('robots.txt', [PublicProfileController::class, 'robots'])->name('robots');
+Route::get('indexnow.txt', [PublicProfileController::class, 'indexNowKey'])->name('indexnow');
+
+// Email marketing, public side: sign-up form, unsubscribe (also one-click from mail apps) and open tracking.
+Route::post('p/{profile:handle}/subscribe', [NewsletterController::class, 'subscribe'])->middleware('throttle:10,1')->name('newsletter.subscribe');
+Route::get('unsubscribe/{token}', [NewsletterController::class, 'unsubscribePage'])->name('email.unsubscribe');
+Route::post('unsubscribe/{token}', [NewsletterController::class, 'unsubscribe'])->middleware('throttle:30,1')->name('email.unsubscribe.confirm');
+Route::post('unsubscribe/{token}/resubscribe', [NewsletterController::class, 'resubscribe'])->middleware('throttle:10,1')->name('email.resubscribe');
+Route::get('e/o/{send}', [NewsletterController::class, 'open'])->middleware('signed')->name('email.open');
 
 // Client workspace: every page only shows the signed-in client's own data,
 // and needs a running trial or an active plan ("has-access").
@@ -52,6 +62,12 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
     Volt::route('grow/business-profile', 'grow.business')->name('grow.business');
     Volt::route('grow/seo', 'grow.seo')->name('grow.seo');
     Volt::route('grow/public-page', 'grow.page')->name('grow.page');
+    Volt::route('grow/photos', 'grow.photos')->name('grow.photos');
+
+    Volt::route('email', 'email.campaigns')->name('email.campaigns');
+    Volt::route('email/campaigns/{campaign}', 'email.campaign')->name('email.campaign');
+    Volt::route('email/contacts', 'email.contacts')->name('email.contacts');
+    Volt::route('email/settings', 'email.settings')->name('email.settings');
 
     // Academy (studying needs a trial or plan; the public pages above don't).
     Volt::route('academy', 'academy.index')->name('academy');

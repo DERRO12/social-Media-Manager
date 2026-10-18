@@ -87,4 +87,9 @@ return [
         'read_access' => (bool) env('X_READ_ACCESS', false),
     ],
 
+    // Tell Bing and other IndexNow search engines about new public pages and photos (see App\Services\Seo\IndexNow).
+    'indexnow' => [
+        'enabled' => (bool) env('INDEXNOW_ENABLED', env('APP_ENV') === 'production'),
+    ],
+
 ];

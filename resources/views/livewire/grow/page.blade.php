@@ -1,13 +1,17 @@
 <?php
 
+use App\Http\Controllers\PublicProfileController;
 use App\Models\PublicProfile;
+use App\Services\Seo\ImageOptimizer;
+use App\Services\Seo\IndexNow;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new class extends Component {
-    use WithPagination;
+    use WithFileUploads, WithPagination;
 
     public string $handle = '';
     public string $displayName = '';
@@ -16,6 +20,10 @@ new class extends Component {
     public string $location = '';
     public string $website = '';
     public bool $isPublic = false;
+    public string $seoTitle = '';
+    public string $seoDescription = '';
+    public bool $showBusiness = false;
+    public $avatar = null;
 
     public function mount(): void
     {
@@ -29,6 +37,9 @@ new class extends Component {
         $this->location = (string) ($p->location ?? $user->businessProfile?->city ?? '');
         $this->website = (string) ($p->website ?? $user->businessProfile?->website ?? '');
         $this->isPublic = (bool) $p?->is_public;
+        $this->seoTitle = (string) $p?->seo_title;
+        $this->seoDescription = (string) $p?->seo_description;
+        $this->showBusiness = (bool) ($p?->show_business ?? $user->businessProfile !== null);
     }
 
     private function suggestHandle(string $name): string
@@ -55,13 +66,30 @@ new class extends Component {
             'bio' => ['nullable', 'string', 'max:1500'],
             'location' => ['nullable', 'string', 'max:120'],
             'website' => ['nullable', 'url', 'max:255'],
+            'seoTitle' => ['nullable', 'string', 'max:70'],
+            'seoDescription' => ['nullable', 'string', 'max:170'],
+            'avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ], [
             'handle.regex' => 'Use lowercase letters, numbers and single dashes, e.g. amara-studio.',
             'handle.not_in' => 'That address is reserved. Please choose another.',
             'handle.unique' => 'That address is taken. Please choose another.',
         ]);
 
-        auth()->user()->publicProfile()->updateOrCreate([], [
+        $avatarPath = $profile?->avatar_path;
+        if ($this->avatar) {
+            try {
+                $stored = app(ImageOptimizer::class)->store($this->avatar->getRealPath(), 'photos/'.auth()->id(), $this->displayName.' logo', max: 800, thumb: 800);
+            } catch (RuntimeException $e) {
+                $this->addError('avatar', $e->getMessage());
+
+                return;
+            }
+            app(ImageOptimizer::class)->delete($avatarPath, $stored['thumb_path'] !== $stored['path'] ? $stored['thumb_path'] : null);
+            $avatarPath = $stored['path'];
+            $this->avatar = null;
+        }
+
+        $profile = auth()->user()->publicProfile()->updateOrCreate([], [
             'handle' => $this->handle,
             'display_name' => $this->displayName,
             'headline' => $this->headline ?: null,
@@ -69,9 +97,42 @@ new class extends Component {
             'location' => $this->location ?: null,
             'website' => $this->website ?: null,
             'is_public' => $this->isPublic,
+            'seo_title' => $this->seoTitle ?: null,
+            'seo_description' => $this->seoDescription ?: null,
+            'avatar_path' => $avatarPath,
+            'show_business' => $this->showBusiness,
         ]);
 
+        if (PublicProfileController::isLive($profile->fresh())) {
+            app(IndexNow::class)->submit([$profile->url()]);
+        }
+
         $this->dispatch('saved');
+    }
+
+    public function removeAvatar(): void
+    {
+        $profile = auth()->user()->publicProfile;
+
+        if ($profile?->avatar_path) {
+            app(ImageOptimizer::class)->delete($profile->avatar_path);
+            $profile->update(['avatar_path' => null]);
+        }
+    }
+
+    /** Free checking tools, with the page address filled in: [link, label, help]. */
+    public function testTools(string $pageUrl): array
+    {
+        $encoded = urlencode($pageUrl);
+        $site = urlencode('site:'.preg_replace('#^https?://#', '', $pageUrl));
+
+        return [
+            ['https://search.google.com/test/rich-results?url='.$encoded, 'Rich results test', 'Checks the details Google reads (business, photos, videos).'],
+            ['https://pagespeed.web.dev/analysis?url='.$encoded, 'PageSpeed Insights', 'Speed and mobile score.'],
+            ['https://www.google.com/search?q='.$site, 'Is it on Google yet?', 'Shows the pages Google has already indexed.'],
+            ['https://www.google.com/search?tbm=isch&q='.$site, 'Photos on Google Images', 'Shows which photos Google has indexed.'],
+            ['https://developers.facebook.com/tools/debug/?q='.$encoded, 'Sharing preview', 'How the link looks on Facebook and WhatsApp.'],
+        ];
     }
 
     public function toggleItem(int $id): void
@@ -89,6 +150,9 @@ new class extends Component {
             'items' => auth()->user()->contentItems()->with('account')->whereNotNull('content_items.permalink')
                 ->latest('content_items.published_at')->paginate(12),
             'pageUrl' => url('/p/'.($profile->handle ?? $this->handle)),
+            'hasBusiness' => auth()->user()->businessProfile !== null,
+            'live' => $profile && PublicProfileController::isLive($profile),
+            'photoCount' => auth()->user()->photos()->count(),
         ];
     }
 }; ?>
@@ -127,6 +191,53 @@ new class extends Component {
                 <flux:input wire:model="headline" label="Headline" placeholder="Natural hair care tips and bridal styling in Kampala" description="Shown under your name and in Google results. Use the words people search." />
                 <flux:textarea wire:model="bio" label="About" rows="4" />
                 <flux:input wire:model="website" type="url" label="Website" placeholder="https://…" />
+
+                <flux:field>
+                    <flux:label>Page picture or logo</flux:label>
+                    <div class="flex flex-wrap items-center gap-4">
+                        <x-avatar size="lg" :src="$avatar ? $avatar->temporaryUrl() : $profile?->avatarUrl()" :name="$displayName" class="!size-16" />
+                        <input type="file" wire:model="avatar" accept="image/jpeg,image/png,image/webp"
+                            class="block min-w-0 flex-1 text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:text-zinc-300 dark:file:bg-zinc-700 dark:file:text-white">
+                        @if ($profile?->avatar_path)
+                            <flux:button size="sm" variant="ghost" wire:click="removeAvatar">Remove</flux:button>
+                        @endif
+                    </div>
+                    <flux:description>Shown on your page and when the link is shared. Otherwise your connected account’s picture is used.</flux:description>
+                    <flux:error name="avatar" />
+                </flux:field>
+
+                <div class="flex flex-col gap-4 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900/50">
+                    <div>
+                        <flux:heading>How your page looks in Google</flux:heading>
+                        <flux:text class="text-sm">Optional. Leave empty to use your name, headline and bio.</flux:text>
+                    </div>
+                    <div class="rounded-lg bg-white p-4 shadow-xs dark:bg-zinc-800" aria-label="Google result preview">
+                        <div class="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400">
+                            <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-700"><x-app-logo-icon class="size-3.5" /></span>
+                            <span class="min-w-0 truncate">{{ parse_url(config('app.url'), PHP_URL_HOST) }} › p › {{ $handle }}</span>
+                        </div>
+                        <div class="mt-1 line-clamp-1 text-lg text-[#1a0dab] dark:text-[#8ab4f8]">{{ Str::limit($seoTitle ?: $displayName.($headline ? ': '.$headline : ''), 60) }}</div>
+                        <div class="line-clamp-2 text-sm text-zinc-600 dark:text-zinc-300">{{ Str::limit($seoDescription ?: ($headline ?: $bio) ?: 'Videos, posts and photos by '.$displayName.'.', 160) }}</div>
+                    </div>
+                    <flux:field>
+                        <flux:label>Google title <span class="ms-auto text-xs font-normal tabular-nums text-zinc-500">{{ mb_strlen($seoTitle) }}/60</span></flux:label>
+                        <flux:input wire:model.live.debounce.300ms="seoTitle" maxlength="70" :placeholder="$displayName.' – Bridal hair and braids in Kampala'" />
+                        <flux:description>Up to about 60 characters: your name plus what you do and where.</flux:description>
+                        <flux:error name="seoTitle" />
+                    </flux:field>
+                    <flux:field>
+                        <flux:label>Google description <span class="ms-auto text-xs font-normal tabular-nums text-zinc-500">{{ mb_strlen($seoDescription) }}/160</span></flux:label>
+                        <flux:textarea wire:model.live.debounce.300ms="seoDescription" rows="2" maxlength="170" placeholder="Book bridal braids, knotless braids and natural hair care in Ntinda, Kampala. See our latest work and prices." />
+                        <flux:description>About 120–160 characters that make people want to click.</flux:description>
+                        <flux:error name="seoDescription" />
+                    </flux:field>
+                </div>
+
+                @if ($hasBusiness)
+                    <flux:switch wire:model="showBusiness" label="Show my business details" description="Services, opening hours, address, phone, directions and review link from your Business Profile, marked up so Google understands them." />
+                @else
+                    <flux:text class="text-sm">Add your <a href="{{ route('grow.business') }}" wire:navigate class="underline">Business Profile</a> to show services, hours, address and a call button on this page.</flux:text>
+                @endif
                 <flux:switch wire:model="isPublic" label="Make my page public" description="When on, anyone (and Google) can see the page. Turn it off at any time." />
 
                 <div class="flex flex-wrap items-center gap-3">
@@ -171,12 +282,35 @@ new class extends Component {
                     <li>Turn your page on and save.</li>
                     <li>Link to it from your Instagram/TikTok bio, Google Business Profile and website.</li>
                     <li>Write clear titles and descriptions on your videos; Google reads text.</li>
+                    <li>Add photos with good titles and alt text so they show in Google Images.</li>
                     <li>Be patient: Google usually takes days to a few weeks to show new pages.</li>
                 </ol>
                 <flux:text class="mt-3 text-xs">
                     Every public page is listed in <a href="{{ url('/sitemap.xml') }}" target="_blank" class="underline">{{ url('/sitemap.xml') }}</a>, which tells search engines where your content is.
                 </flux:text>
             </div>
+            <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+                <flux:heading>Photos for Google Images</flux:heading>
+                <flux:text class="mt-1 text-sm">
+                    {{ $photoCount ? $photoCount.' '.Str::plural('photo', $photoCount).' on your page.' : 'No photos yet.' }}
+                    Each photo gets its own page that can show in Google Images.
+                </flux:text>
+                <flux:button class="mt-3" size="sm" icon="photo" :href="route('grow.photos')" wire:navigate>Manage photos</flux:button>
+            </div>
+            @if ($live)
+                <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+                    <flux:heading>Test your page</flux:heading>
+                    <flux:text class="mt-1 text-sm">Free Google and Facebook tools, opened with your page address filled in.</flux:text>
+                    <ul class="mt-3 space-y-2 text-sm">
+                        @foreach ($this->testTools($pageUrl) as [$href, $label, $help])
+                            <li>
+                                <a href="{{ $href }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 font-medium underline">{{ $label }} <flux:icon name="arrow-top-right-on-square" variant="micro" /></a>
+                                <div class="text-xs text-zinc-500">{{ $help }}</div>
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
             <div class="rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
                 <flux:heading>Your own website</flux:heading>
                 <flux:text class="mt-1 text-sm">Have a website too? Run the <a href="{{ route('grow.seo') }}" wire:navigate class="underline">SEO checker</a> on it and fix the top issues.</flux:text>

@@ -3,7 +3,11 @@
 use App\Enums\Platform;
 use App\Models\Plan;
 use App\Models\Setting;
+use App\Models\User;
 use App\Services\Billing\StripeBilling;
+use App\Services\Mail\SiteMail;
+use App\Services\Mail\Smtp;
+use Illuminate\Support\Facades\Artisan;
 use App\Services\Social\SocialManager;
 use Livewire\Volt\Component;
 
@@ -13,7 +17,7 @@ new class extends Component {
      * group => [label, platforms it powers, fields => [key => [label, secret?]]]
      */
     public const GROUPS = [
-        'youtube' => ['YouTube', ['youtube'], 'https://console.cloud.google.com/apis/credentials', [
+        'youtube' => ['Google (YouTube and Business Profile)', ['youtube', 'google_business'], 'https://console.cloud.google.com/apis/credentials', [
             'client_id' => ['Client ID', false],
             'client_secret' => ['Client secret', true],
             'api_key' => ['API key (optional: Trending for clients without a channel)', true],
@@ -56,6 +60,16 @@ new class extends Component {
     public bool $linkedinCommunityApi = false;
     public bool $xReadAccess = false;
 
+    public string $mailProvider = 'gmail';
+    public string $mailHost = '';
+    public $mailPort = 587;
+    public string $mailUsername = '';
+    public string $mailPassword = '';
+    public string $mailFromName = '';
+    public bool $requireVerification = false;
+    public ?string $mailResult = null;
+    public bool $mailOk = false;
+
     public function mount(): void
     {
         $this->trialDays = (int) Setting::get('billing.trial_days', 14);
@@ -76,6 +90,99 @@ new class extends Component {
 
         $this->linkedinCommunityApi = (bool) SocialManager::credentials('linkedin')['community_api'];
         $this->xReadAccess = (bool) SocialManager::credentials('x')['read_access'];
+
+        $this->mailProvider = (string) Setting::get('mail.provider', 'gmail');
+        $this->mailHost = (string) Setting::get('mail.host', '');
+        $this->mailPort = (int) Setting::get('mail.port', 587);
+        $this->mailUsername = (string) Setting::get('mail.username', '');
+        $this->mailFromName = (string) Setting::get('mail.from_name', config('app.name'));
+        $this->requireVerification = Setting::get('mail.require_verification') === '1';
+    }
+
+    /** Server details from the chosen provider, or the custom ones typed in. */
+    private function mailServer(): array
+    {
+        $preset = Smtp::PROVIDERS[$this->mailProvider] ?? Smtp::PROVIDERS['custom'];
+
+        return $this->mailProvider === 'custom' ? [trim($this->mailHost), (int) $this->mailPort] : [$preset[1], $preset[2]];
+    }
+
+    public function saveMail(): void
+    {
+        $this->validate([
+            'mailProvider' => ['required', 'in:'.implode(',', array_keys(Smtp::PROVIDERS))],
+            'mailHost' => ['required_if:mailProvider,custom', 'nullable', 'string', 'max:255'],
+            'mailPort' => ['required_if:mailProvider,custom', 'nullable', 'integer', 'between:1,65535'],
+            'mailUsername' => ['required', 'email', 'max:255'],
+            'mailPassword' => [Setting::get('mail.password') ? 'nullable' : 'required', 'string', 'max:255'],
+            'mailFromName' => ['nullable', 'string', 'max:100'],
+        ], ['mailPassword.required' => 'Paste the app password.']);
+
+        [$host, $port] = $this->mailServer();
+        Setting::put('mail.provider', $this->mailProvider);
+        Setting::put('mail.host', $host);
+        Setting::put('mail.port', $port);
+        Setting::put('mail.username', strtolower(trim($this->mailUsername)));
+        Setting::put('mail.from_name', $this->mailFromName ?: config('app.name'));
+        if ($this->mailPassword !== '') {
+            Setting::put('mail.password', Smtp::cleanPassword($this->mailPassword), encrypt: true);
+            $this->mailPassword = '';
+        }
+
+        $this->restartWorkers();
+        $this->mailResult = null;
+        $this->dispatch('saved-mail');
+    }
+
+    /** Send a test email to the admin with the saved (or just typed) details. */
+    public function testMail(): void
+    {
+        [$host, $port] = $this->mailServer();
+        $password = $this->mailPassword !== '' ? Smtp::cleanPassword($this->mailPassword) : (string) Setting::get('mail.password');
+
+        if (! $host || ! $this->mailUsername || ! $password) {
+            [$this->mailOk, $this->mailResult] = [false, 'Fill in the email address and app password first.'];
+
+            return;
+        }
+
+        $error = Smtp::test(Smtp::config($host, $port, trim($this->mailUsername), $password), trim($this->mailUsername), $this->mailFromName ?: config('app.name'), auth()->user()->email);
+        $this->mailOk = $error === null;
+        $this->mailResult = $error ?? 'Test email sent to '.auth()->user()->email.'. Check the inbox (and spam folder).';
+    }
+
+    public function saveVerification(): void
+    {
+        if ($this->requireVerification && ! SiteMail::configured()) {
+            $this->requireVerification = false;
+            $this->addError('requireVerification', 'Connect a mailbox first, or people could not receive the confirmation email.');
+
+            return;
+        }
+
+        // Existing accounts are treated as confirmed, so turning this on never locks anyone out.
+        if ($this->requireVerification) {
+            User::whereNull('email_verified_at')->update(['email_verified_at' => now()]);
+        }
+
+        Setting::put('mail.require_verification', $this->requireVerification ? '1' : '0');
+        $this->dispatch('saved-verification');
+    }
+
+    public function removeMail(): void
+    {
+        foreach (['provider', 'host', 'port', 'username', 'password', 'from_name', 'require_verification'] as $key) {
+            Setting::put("mail.{$key}", null);
+        }
+
+        $this->restartWorkers();
+        $this->reset('mailUsername', 'mailPassword', 'mailResult', 'requireVerification');
+    }
+
+    /** Background workers read mail settings when they start; restart them so they pick up the change. */
+    private function restartWorkers(): void
+    {
+        rescue(fn () => Artisan::call('queue:restart'), report: false);
     }
 
     public function saveBilling(): void
@@ -173,6 +280,8 @@ new class extends Component {
         return [
             'groups' => self::GROUPS,
             'plans' => Plan::orderBy('sort')->get(),
+            'mailConfigured' => SiteMail::configured(),
+            'mailPasswordSaved' => filled(Setting::get('mail.password')),
             'stripeEnabled' => app(StripeBilling::class)->enabled(),
             'stripeWebhookSaved' => filled(app(StripeBilling::class)->webhookSecret()),
             'saved' => collect(self::GROUPS)->mapWithKeys(fn ($g, $group) => [
@@ -189,8 +298,46 @@ new class extends Component {
 <div class="flex max-w-4xl flex-col gap-8">
     <div>
         <flux:heading size="xl">Settings</flux:heading>
-        <flux:text>Control trials, payments and which social platforms your clients can connect.</flux:text>
+        <flux:text>Control email, trials, payments and which social platforms your clients can connect.</flux:text>
     </div>
+
+    {{-- Site email --}}
+    <section class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <flux:heading size="lg">Email (Gmail with app password)</flux:heading>
+            @if ($mailConfigured)
+                <flux:badge color="green" icon="check">Connected: {{ $mailUsername }}</flux:badge>
+            @else
+                <flux:badge color="amber">Not connected: emails are not being sent</flux:badge>
+            @endif
+        </div>
+        <flux:text class="text-sm">
+            Sends the site’s emails: password resets, email confirmation, welcome emails, trial and plan reminders, payment updates,
+            failed post alerts and certificates. Use a mailbox you own, e.g. a Gmail address for {{ config('app.name') }}.
+        </flux:text>
+        <form wire:submit="saveMail" class="flex flex-col gap-4">
+            @include('partials.mailbox-fields', ['passwordSaved' => $mailPasswordSaved])
+            <div class="flex flex-wrap items-center gap-3">
+                <flux:button type="submit" variant="primary">Save</flux:button>
+                <flux:button wire:click="testMail" icon="paper-airplane">Send test email to me</flux:button>
+                @if ($mailConfigured)
+                    <flux:button variant="ghost" wire:click="removeMail" wire:confirm="Disconnect the mailbox? The site will stop sending emails.">Disconnect</flux:button>
+                @endif
+                <x-action-message on="saved-mail">Saved.</x-action-message>
+                <span wire:loading wire:target="testMail" class="text-sm text-zinc-500">Sending…</span>
+            </div>
+            @if ($mailResult)
+                <flux:callout :variant="$mailOk ? 'success' : 'danger'" :icon="$mailOk ? 'check-circle' : 'exclamation-triangle'" :heading="$mailResult" />
+            @endif
+        </form>
+        <flux:separator />
+        <div class="flex flex-col gap-2">
+            <flux:switch wire:model="requireVerification" wire:change="saveVerification" label="New sign-ups must confirm their email"
+                description="Sends a confirmation link at sign-up and blocks fake addresses. Existing accounts are not affected." />
+            <flux:error name="requireVerification" />
+            <x-action-message on="saved-verification">Saved.</x-action-message>
+        </div>
+    </section>
 
     {{-- Trials --}}
     <form wire:submit="saveBilling" class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
@@ -304,6 +451,18 @@ new class extends Component {
 
                 @if ($group === 'x')
                     <flux:checkbox wire:model="xReadAccess" label="My X API plan includes reading (Basic or higher). Leave off on the Free plan, which can only post." />
+                @endif
+
+                @if ($group === 'youtube')
+                    <div class="rounded-lg bg-sky-50 p-3 text-sm text-sky-950 dark:bg-sky-950/40 dark:text-sky-100">
+                        <div class="font-medium">Google Business Profile (create businesses, Google reviews in the inbox)</div>
+                        <ol class="mt-1 list-decimal space-y-1 ps-5">
+                            <li>In the same Google Cloud project, request access: <a href="https://developers.google.com/my-business/content/prereqs#request-access" target="_blank" rel="noopener" class="underline">Business Profile API access form</a>. Google usually answers within a few days to two weeks.</li>
+                            <li>Once approved, enable: My Business Account Management API, My Business Business Information API and Google My Business API.</li>
+                            <li>Add the <code>business.manage</code> scope to the OAuth consent screen and the second redirect URL below.</li>
+                        </ol>
+                        <div class="mt-1 text-xs opacity-80">Until Google approves access, clients see a clear message when they try to connect.</div>
+                    </div>
                 @endif
 
                 <div class="rounded-lg bg-zinc-50 p-3 text-sm dark:bg-zinc-900">

@@ -13,6 +13,8 @@ Queue: database driver (`retry_after` 3700 > the 3600s upload timeout, so long u
 - **Sync:** `SyncSocialAccount` job, scheduled every `SYNC_EVERY_MINUTES` (5). Comments are re-downloaded only when the platform's count changed (`comments_synced_count`) or every 6h. YouTube fetches every page and every reply.
 - **Billing:** `SubscriptionManager` (trials, manual activation, payment-link approvals), optional Stripe (`StripeBilling`), PayPal / Yo! Payments links per plan with "I've paid" claims approved in Admin → Payments.
 - **Academy:** courses → modules → lessons (YouTube id and/or Markdown notes) → quiz → certificate (`App\Services\Academy\Academy`). Public pages under `/courses` and `/certificates/{code}`.
+- **Email:** the site's mail goes through the admin's mailbox (Admin → Settings → Email, `SiteMail::apply()` at boot, Gmail app password). Clients send newsletters from their own `Mailbox` via `SendCampaign` (paced, daily cap, one-click unsubscribe). Email confirmation is only enforced when the admin switches it on (`User::hasVerifiedEmail()`).
+- **Search visibility:** public pages `/p/{handle}` with photos (`ImageOptimizer` strips GPS, makes WebP), structured data in `App\Support\ProfileSchema`, image sitemap, IndexNow in production.
 - **Uploads:** browser sends videos in 50 MB chunks (`ChunkedUploadController`) because Cloudflare rejects requests over 100 MB.
 
 ## Platform status
@@ -20,6 +22,7 @@ Queue: database driver (`retry_after` 3700 > the 3600s upload timeout, so long u
 - X: posts on the Free plan; reading replies needs a paid plan + the "read access" switch in Admin → Settings.
 - TikTok: sandbox; app review pending (domain TXT verification, demo video).
 - Meta (Facebook/Instagram), LinkedIn: setup guides given; not yet connected.
+- Google Business Profile (create listing, reviews in the inbox): built; needs Google's Business Profile API access approval for the Google Cloud project.
 
 ## Local development (Windows, XAMPP)
 - PHP 8.2 from XAMPP **without the intl extension**: don't use Laravel's `Number` helper in views; use `App\Support\Metric`.

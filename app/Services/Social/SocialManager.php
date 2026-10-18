@@ -6,6 +6,7 @@ use App\Enums\Platform;
 use App\Models\Setting;
 use App\Services\Social\Contracts\PlatformDriver;
 use App\Services\Social\Drivers\FacebookDriver;
+use App\Services\Social\Drivers\GoogleBusinessDriver;
 use App\Services\Social\Drivers\InstagramDriver;
 use App\Services\Social\Drivers\LinkedInDriver;
 use App\Services\Social\Drivers\TikTokDriver;
@@ -26,6 +27,7 @@ class SocialManager
             Platform::TikTok => new TikTokDriver(self::credentials('tiktok')),
             Platform::LinkedIn => new LinkedInDriver(self::credentials('linkedin')),
             Platform::X => new XDriver(self::credentials('x')),
+            Platform::GoogleBusiness => new GoogleBusinessDriver(self::credentials('youtube')),
         };
     }
 
@@ -43,6 +45,8 @@ class SocialManager
     {
         return match ($platform) {
             Platform::Facebook, Platform::Instagram => 'meta',
+            // One Google Cloud app (Admin → Settings → YouTube) covers YouTube and Business Profile.
+            Platform::GoogleBusiness => 'youtube',
             default => $platform->value,
         };
     }
