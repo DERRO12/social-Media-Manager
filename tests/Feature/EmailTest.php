@@ -139,7 +139,7 @@ class EmailTest extends TestCase
             ->set('importTags', 'Market Day')
             ->set('importConsent', true)
             ->call('import')
-            ->assertSet('importResult', 'Added 2 contacts, skipped 2 (invalid, duplicate or over the limit).');
+            ->assertSet('importResult', 'Added 2 contacts, skipped 2 (no valid email or phone, duplicate, or over the limit).');
 
         $this->assertSame('vip, customers', $client->contacts()->firstWhere('email', 'ama@example.com')->tags);
         $this->assertSame(['kwame@example.com', 'esi@example.com'], $client->contacts()->tagged('market day')->pluck('email')->all());

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Services\Sms\Phone;
 use Illuminate\Support\Str;
 
 /** Someone on a client's mailing list. */
@@ -17,7 +18,9 @@ class Contact extends Model
     /** Most contacts one client can keep. */
     public const LIMIT = 5000;
 
-    protected $fillable = ['email', 'name', 'tags', 'source', 'status', 'token', 'subscribed_at', 'unsubscribed_at'];
+    protected $fillable = ['email', 'phone', 'name', 'tags', 'source', 'status', 'sms_status', 'token', 'subscribed_at', 'unsubscribed_at'];
+
+    protected $attributes = ['status' => self::SUBSCRIBED, 'sms_status' => self::SUBSCRIBED, 'source' => 'manual'];
 
     protected function casts(): array
     {
@@ -28,8 +31,12 @@ class Contact extends Model
     {
         static::creating(function (Contact $contact) {
             $contact->token ??= Str::random(40);
-            $contact->email = strtolower(trim($contact->email));
             $contact->subscribed_at ??= now();
+        });
+
+        static::saving(function (Contact $contact) {
+            $contact->email = filled($contact->email) ? strtolower(trim($contact->email)) : null;
+            $contact->phone = Phone::normalise($contact->phone);
         });
     }
 
@@ -38,9 +45,29 @@ class Contact extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** Can be emailed: has an address and hasn't opted out of email. */
     public function scopeSubscribed(Builder $query): void
     {
-        $query->where('status', self::SUBSCRIBED);
+        $query->where('status', self::SUBSCRIBED)->whereNotNull('email');
+    }
+
+    /** Can be texted: has a phone number and hasn't opted out of SMS. */
+    public function scopeSmsSubscribed(Builder $query): void
+    {
+        $query->where('sms_status', self::SUBSCRIBED)->whereNotNull('phone');
+    }
+
+    /** Reachable on a channel ("email" or "sms"). */
+    public function scopeReachableBy(Builder $query, string $channel): void
+    {
+        $channel === 'sms' ? $query->smsSubscribed() : $query->subscribed();
+    }
+
+    public function isReachableBy(string $channel): bool
+    {
+        return $channel === 'sms'
+            ? $this->phone && $this->sms_status === self::SUBSCRIBED
+            : $this->email && $this->status === self::SUBSCRIBED;
     }
 
     /** Contacts with this tag (tags are stored comma-separated). */
@@ -76,5 +103,16 @@ class Contact extends Model
     public function unsubscribeUrl(): string
     {
         return route('email.unsubscribe', $this->token);
+    }
+
+    /** Short opt-out link for SMS, where every character counts: /s/{id}-{first 8 of the token}. */
+    public function smsOptOutUrl(): string
+    {
+        return route('sms.optout', $this->id.'-'.substr($this->token, 0, 8));
+    }
+
+    public function unsubscribeSms(): void
+    {
+        $this->update(['sms_status' => self::UNSUBSCRIBED]);
     }
 }

@@ -155,6 +155,16 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(Mailbox::class);
     }
 
+    public function shortLinks(): HasMany
+    {
+        return $this->hasMany(ShortLink::class);
+    }
+
+    public function smsAccount(): HasOne
+    {
+        return $this->hasOne(SmsAccount::class);
+    }
+
     public function contacts(): HasMany
     {
         return $this->hasMany(Contact::class);

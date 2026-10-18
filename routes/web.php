@@ -5,6 +5,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ChunkedUploadController;
 use App\Http\Controllers\GoogleLoginController;
 use App\Http\Controllers\ImpersonationController;
+use App\Http\Controllers\LinkController;
 use App\Http\Controllers\NewsletterController;
 use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\SocialAuthController;
@@ -45,6 +46,9 @@ Route::get('unsubscribe/{token}', [NewsletterController::class, 'unsubscribePage
 Route::post('unsubscribe/{token}', [NewsletterController::class, 'unsubscribe'])->middleware('throttle:30,1')->name('email.unsubscribe.confirm');
 Route::post('unsubscribe/{token}/resubscribe', [NewsletterController::class, 'resubscribe'])->middleware('throttle:10,1')->name('email.resubscribe');
 Route::get('e/o/{send}', [NewsletterController::class, 'open'])->middleware('signed')->name('email.open');
+// Short trackable links.
+Route::get('go/{code}', [LinkController::class, 'go'])->middleware('throttle:120,1')->where('code', '[A-Za-z0-9]{4,16}')->name('go');
+Route::get('s/{code}', [NewsletterController::class, 'smsOptOut'])->middleware('throttle:30,1')->where('code', '[0-9]+-[A-Za-z0-9]{8}')->name('sms.optout');
 
 // Client workspace: every page only shows the signed-in client's own data,
 // and needs a running trial or an active plan ("has-access").
@@ -64,6 +68,10 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
     Volt::route('grow/public-page', 'grow.page')->name('grow.page');
     Volt::route('grow/photos', 'grow.photos')->name('grow.photos');
 
+    Volt::route('calendar', 'calendar.index')->name('calendar');
+    Volt::route('links', 'links.index')->name('links');
+    Volt::route('insights', 'insights.index')->name('insights');
+    Route::get('qr/{type}/{link?}', [LinkController::class, 'qr'])->where('type', 'link|page|review')->name('qr');
     Volt::route('email', 'email.campaigns')->name('email.campaigns');
     Volt::route('email/campaigns/{campaign}', 'email.campaign')->name('email.campaign');
     Volt::route('email/contacts', 'email.contacts')->name('email.contacts');

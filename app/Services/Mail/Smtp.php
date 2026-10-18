@@ -83,14 +83,25 @@ class Smtp
         };
     }
 
-    /** Merge tags people can use in emails. */
-    public static function personalise(string $text, ?string $name): string
+    /** Merge tags people can use in emails: {name}, {first_name}, plus links like {review_link} (see links()). */
+    public static function personalise(string $text, ?string $name, array $links = []): string
     {
         $name = trim((string) $name);
 
         return strtr($text, [
             '{name}' => $name ?: 'there',
             '{first_name}' => $name ? strtok($name, ' ') : 'there',
+            ...$links,
         ]);
+    }
+
+    /** The client's own links for emails: their Google review link and public page. */
+    public static function links(\App\Models\User $user): array
+    {
+        $review = $user->businessProfile?->reviewUrl()
+            ?? $user->socialAccounts()->where('platform', \App\Enums\Platform::GoogleBusiness)->get()->pluck('meta.review_url')->filter()->first();
+        $page = $user->publicProfile?->is_public ? $user->publicProfile->url() : null;
+
+        return array_filter(['{review_link}' => $review, '{page_link}' => $page]);
     }
 }

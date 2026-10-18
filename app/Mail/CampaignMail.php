@@ -30,13 +30,13 @@ class CampaignMail extends Mailable
         return new Envelope(
             from: new Address($this->mailbox->username, $this->mailbox->fromName()),
             replyTo: $this->mailbox->reply_to ? [new Address($this->mailbox->reply_to)] : [],
-            subject: Smtp::personalise($this->campaign->subject, $this->contact->name),
+            subject: Smtp::personalise($this->campaign->subject, $this->contact->name, Smtp::links($this->campaign->user)),
         );
     }
 
     public function content(): Content
     {
-        $body = Smtp::personalise((string) $this->campaign->body, $this->contact->name);
+        $body = Smtp::personalise((string) $this->campaign->body, $this->contact->name, Smtp::links($this->campaign->user));
         $profile = $this->campaign->user->publicProfile;
 
         return new Content(

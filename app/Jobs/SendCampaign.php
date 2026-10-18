@@ -6,6 +6,7 @@ use App\Mail\CampaignMail;
 use App\Models\EmailCampaign;
 use App\Models\EmailCampaignSend;
 use App\Services\Mail\Smtp;
+use App\Services\Sms\EgoSms;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Sleep;
@@ -31,6 +32,12 @@ class SendCampaign implements ShouldQueue
         $campaign = EmailCampaign::with('user.mailbox', 'user.publicProfile')->find($this->campaignId);
 
         if (! $campaign || $campaign->status !== 'sending') {
+            return;
+        }
+
+        if ($campaign->isSms()) {
+            $this->sendSms($campaign, app(EgoSms::class));
+
             return;
         }
 
@@ -86,6 +93,63 @@ class SendCampaign implements ShouldQueue
 
         if ($campaign->sends()->where('status', 'pending')->exists()) {
             self::dispatch($this->campaignId); // next batch (or tomorrow, if today's limit is used up)
+        } else {
+            $campaign->update(['status' => 'sent', 'finished_at' => now()]);
+        }
+    }
+
+    /** Text messages through EgoSMS, one per contact, with a short opt-out link. */
+    private function sendSms(EmailCampaign $campaign, EgoSms $sms): void
+    {
+        $user = $campaign->user;
+        $account = EgoSms::accountFor($user);
+
+        if (! $account) {
+            $campaign->update(['status' => 'paused', 'error' => 'SMS isn’t set up. Connect EgoSMS and press Resume.']);
+
+            return;
+        }
+
+        $allowance = min(self::BATCH, EgoSms::remainingFor($user));
+        if ($allowance === 0) {
+            $campaign->update(['status' => 'paused', 'error' => 'This month’s SMS allowance is used up. Connect your own EgoSMS account to continue, then press Resume.']);
+
+            return;
+        }
+
+        $links = Smtp::links($user);
+        $sends = $campaign->sends()->where('status', 'pending')->with('contact')->limit($allowance)->get();
+
+        foreach ($sends as $send) {
+            if (! $send->contact->isReachableBy('sms')) {
+                $send->update(['status' => 'skipped']);
+
+                continue;
+            }
+
+            $message = Smtp::personalise((string) $campaign->body, $send->contact->name, $links)."\nOpt out: ".$send->contact->smsOptOutUrl();
+            $result = $sms->send($account, $send->contact->phone, $message);
+
+            if ($result['ok']) {
+                $send->update(['status' => 'sent', 'sent_at' => now(), 'cost' => $result['cost']]);
+            } else {
+                $send->update(['status' => 'failed', 'error' => mb_substr($result['error'], 0, 250)]);
+
+                if (EgoSms::isFatal($result['error'])) {
+                    $this->refreshCounts($campaign);
+                    $campaign->update(['status' => 'paused', 'error' => $result['error']]);
+
+                    return;
+                }
+            }
+
+            Sleep::for(200)->milliseconds();
+        }
+
+        $this->refreshCounts($campaign);
+
+        if ($campaign->sends()->where('status', 'pending')->exists()) {
+            self::dispatch($this->campaignId);
         } else {
             $campaign->update(['status' => 'sent', 'finished_at' => now()]);
         }

@@ -14,6 +14,8 @@ Queue: database driver (`retry_after` 3700 > the 3600s upload timeout, so long u
 - **Billing:** `SubscriptionManager` (trials, manual activation, payment-link approvals), optional Stripe (`StripeBilling`), PayPal / Yo! Payments links per plan with "I've paid" claims approved in Admin → Payments.
 - **Academy:** courses → modules → lessons (YouTube id and/or Markdown notes) → quiz → certificate (`App\Services\Academy\Academy`). Public pages under `/courses` and `/certificates/{code}`.
 - **Email:** the site's mail goes through the admin's mailbox (Admin → Settings → Email, `SiteMail::apply()` at boot, Gmail app password). Clients send newsletters from their own `Mailbox` via `SendCampaign` (paced, daily cap, one-click unsubscribe). Email confirmation is only enforced when the admin switches it on (`User::hasVerifiedEmail()`).
+- **SMS:** EgoSMS only (`App\Services\Sms\EgoSms`, JSON API `comms.egosms.co/api/v1/json/`, method SendSms). Platform account in Admin → Settings with a monthly allowance per client; clients may connect their own `SmsAccount`. Phones stored as digits, 256… (`Phone::normalise`). SMS campaigns reuse `email_campaigns` with `channel = sms`.
+- **AI:** Claude via `App\Services\Ai\Writer` (key, model, daily limit in Admin → Settings → AI).
 - **Search visibility:** public pages `/p/{handle}` with photos (`ImageOptimizer` strips GPS, makes WebP), structured data in `App\Support\ProfileSchema`, image sitemap, IndexNow in production.
 - **Uploads:** browser sends videos in 50 MB chunks (`ChunkedUploadController`) because Cloudflare rejects requests over 100 MB.
 

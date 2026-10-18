@@ -17,13 +17,16 @@
                 <flux:navlist.group heading="Workspace" class="grid">
                     <flux:navlist.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>Dashboard</flux:navlist.item>
                     <flux:navlist.item icon="pencil-square" :href="route('compose')" :current="request()->routeIs('compose')" wire:navigate>Create post</flux:navlist.item>
+                    <flux:navlist.item icon="calendar" :href="route('calendar')" :current="request()->routeIs('calendar')" wire:navigate>Calendar</flux:navlist.item>
                     <flux:navlist.item icon="calendar-days" :href="route('posts')" :current="request()->routeIs('posts')" wire:navigate>Scheduled &amp; sent</flux:navlist.item>
                     <flux:navlist.item icon="film" :href="route('content')" :current="request()->routeIs('content')" wire:navigate>All content</flux:navlist.item>
                     <flux:navlist.item icon="chat-bubble-left-right" :href="route('inbox')" :current="request()->routeIs('inbox')" :badge="$unread ?: null" wire:navigate>Inbox</flux:navlist.item>
                     <flux:navlist.item icon="fire" :href="route('trending')" :current="request()->routeIs('trending')" wire:navigate>Trending</flux:navlist.item>
                     <flux:navlist.item icon="academic-cap" :href="route('academy')" :current="request()->routeIs('academy*')" wire:navigate>Academy</flux:navlist.item>
                     <flux:navlist.item icon="magnifying-glass-circle" :href="route('grow.business')" :current="request()->routeIs('grow*')" wire:navigate>Grow on Google</flux:navlist.item>
-                    <flux:navlist.item icon="envelope" :href="route('email.campaigns')" :current="request()->routeIs('email.*')" wire:navigate>Email marketing</flux:navlist.item>
+                    <flux:navlist.item icon="chart-pie" :href="route('insights')" :current="request()->routeIs('insights')" wire:navigate>Insights</flux:navlist.item>
+                    <flux:navlist.item icon="qr-code" :href="route('links')" :current="request()->routeIs('links')" wire:navigate>Links &amp; QR codes</flux:navlist.item>
+                    <flux:navlist.item icon="envelope" :href="route('email.campaigns')" :current="request()->routeIs('email.*')" wire:navigate>Email &amp; SMS</flux:navlist.item>
                     <flux:navlist.item icon="link" :href="route('accounts')" :current="request()->routeIs('accounts')" wire:navigate>Connected accounts</flux:navlist.item>
                     @unless (auth()->user()->isAdmin())
                         <flux:navlist.item icon="credit-card" :href="route('billing')" :current="request()->routeIs('billing')" wire:navigate>Plan &amp; billing</flux:navlist.item>

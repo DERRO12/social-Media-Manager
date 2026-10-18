@@ -4,6 +4,7 @@ use App\Enums\Platform;
 use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Ai\Writer;
 use App\Services\Billing\StripeBilling;
 use App\Services\Mail\SiteMail;
 use App\Services\Mail\Smtp;
@@ -70,6 +71,20 @@ new class extends Component {
     public ?string $mailResult = null;
     public bool $mailOk = false;
 
+    public string $smsUsername = '';
+    public string $smsPassword = '';
+    public string $smsSenderId = '';
+    public $smsLimit = 200;
+    public string $smsTestPhone = '';
+    public ?string $smsResult = null;
+    public bool $smsOk = false;
+
+    public string $aiKey = '';
+    public string $aiModel = 'claude-sonnet-5-5';
+    public $aiLimit = 40;
+    public ?string $aiResult = null;
+    public bool $aiOk = false;
+
     public function mount(): void
     {
         $this->trialDays = (int) Setting::get('billing.trial_days', 14);
@@ -97,6 +112,99 @@ new class extends Component {
         $this->mailUsername = (string) Setting::get('mail.username', '');
         $this->mailFromName = (string) Setting::get('mail.from_name', config('app.name'));
         $this->requireVerification = Setting::get('mail.require_verification') === '1';
+
+        $this->smsUsername = (string) Setting::get('sms.username', '');
+        $this->smsSenderId = (string) Setting::get('sms.sender_id', '');
+        $this->smsLimit = (int) Setting::get('sms.monthly_limit', 200);
+
+        $this->aiModel = (string) Setting::get('ai.model', array_key_first(Writer::MODELS));
+        $this->aiLimit = (int) Setting::get('ai.daily_limit', 40);
+    }
+
+    public function saveSms(): void
+    {
+        $this->validate([
+            'smsUsername' => ['required', 'string', 'max:100'],
+            'smsPassword' => [Setting::get('sms.password') ? 'nullable' : 'required', 'string', 'max:255'],
+            'smsSenderId' => ['required', 'string', 'max:11', 'regex:/^[A-Za-z0-9 ]+$/'],
+            'smsLimit' => ['required', 'integer', 'between:0,100000'],
+        ], ['smsSenderId.max' => 'Sender IDs are at most 11 letters or numbers.']);
+
+        Setting::put('sms.username', trim($this->smsUsername));
+        if ($this->smsPassword !== '') {
+            Setting::put('sms.password', $this->smsPassword, encrypt: true);
+            $this->smsPassword = '';
+        }
+        Setting::put('sms.sender_id', trim($this->smsSenderId));
+        Setting::put('sms.monthly_limit', (int) $this->smsLimit);
+
+        $this->smsResult = null;
+        $this->dispatch('saved-sms');
+    }
+
+    public function testSms(\App\Services\Sms\EgoSms $sms): void
+    {
+        $account = \App\Services\Sms\EgoSms::platformAccount();
+        $phone = \App\Services\Sms\Phone::normalise($this->smsTestPhone);
+
+        if (! $account || ! $phone) {
+            [$this->smsOk, $this->smsResult] = [false, $account ? 'Enter a phone number for the test.' : 'Save the EgoSMS details first.'];
+
+            return;
+        }
+
+        $result = $sms->send($account, $phone, 'Test SMS from '.config('app.name').'. SMS sending works!');
+        $balance = $result['ok'] ? $sms->balance($account) : null;
+        $this->smsOk = $result['ok'];
+        $this->smsResult = $result['ok'] ? 'Test SMS sent.'.($balance !== null ? " Balance: UGX {$balance}." : '') : $result['error'];
+    }
+
+    public function removeSms(): void
+    {
+        foreach (['username', 'password', 'sender_id'] as $key) {
+            Setting::put("sms.{$key}", null);
+        }
+        $this->reset('smsUsername', 'smsPassword', 'smsSenderId', 'smsResult');
+    }
+
+    public function saveAi(): void
+    {
+        $this->validate([
+            'aiKey' => [Setting::get('ai.api_key') ? 'nullable' : 'required', 'string', 'max:300'],
+            'aiModel' => ['required', 'in:'.implode(',', array_keys(Writer::MODELS))],
+            'aiLimit' => ['required', 'integer', 'between:1,1000'],
+        ], ['aiKey.required' => 'Paste your Anthropic API key.']);
+
+        if (trim($this->aiKey) !== '') {
+            Setting::put('ai.api_key', trim($this->aiKey), encrypt: true);
+            $this->aiKey = '';
+        }
+        Setting::put('ai.model', $this->aiModel);
+        Setting::put('ai.daily_limit', (int) $this->aiLimit);
+
+        $this->aiResult = null;
+        $this->dispatch('saved-ai');
+    }
+
+    public function testAi(Writer $writer): void
+    {
+        $key = trim($this->aiKey) ?: (string) Setting::get('ai.api_key');
+
+        if ($key === '') {
+            [$this->aiOk, $this->aiResult] = [false, 'Paste the API key first.'];
+
+            return;
+        }
+
+        $error = $writer->test($key, $this->aiModel);
+        $this->aiOk = $error === null;
+        $this->aiResult = $error ?? 'It works. Clients can now use “Write with AI”.';
+    }
+
+    public function removeAi(): void
+    {
+        Setting::put('ai.api_key', null);
+        $this->aiResult = null;
     }
 
     /** Server details from the chosen provider, or the custom ones typed in. */
@@ -281,6 +389,8 @@ new class extends Component {
             'groups' => self::GROUPS,
             'plans' => Plan::orderBy('sort')->get(),
             'mailConfigured' => SiteMail::configured(),
+            'aiEnabled' => app(Writer::class)->enabled(),
+            'smsEnabled' => \App\Services\Sms\EgoSms::platformAccount() !== null,
             'mailPasswordSaved' => filled(Setting::get('mail.password')),
             'stripeEnabled' => app(StripeBilling::class)->enabled(),
             'stripeWebhookSaved' => filled(app(StripeBilling::class)->webhookSecret()),
@@ -338,6 +448,80 @@ new class extends Component {
             <x-action-message on="saved-verification">Saved.</x-action-message>
         </div>
     </section>
+
+    {{-- SMS --}}
+    <form wire:submit="saveSms" class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <flux:heading size="lg">SMS (EgoSMS)</flux:heading>
+            @if ($smsEnabled)
+                <flux:badge color="green" icon="check">On</flux:badge>
+            @else
+                <flux:badge>Off</flux:badge>
+            @endif
+        </div>
+        <flux:text class="text-sm">
+            Your <a href="https://www.egosms.co" target="_blank" rel="noopener" class="underline">EgoSMS</a> account, shared by clients for SMS campaigns up to a monthly allowance each
+            (you pay EgoSMS for these). Clients can also connect their own EgoSMS account and pay for their own SMS.
+        </flux:text>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <flux:input wire:model="smsUsername" label="EgoSMS username" autocomplete="off" />
+            <flux:input wire:model="smsPassword" type="password" label="EgoSMS password" autocomplete="new-password" :placeholder="$smsEnabled ? 'Saved. Leave empty to keep' : ''" />
+            <flux:input wire:model="smsSenderId" label="Sender ID" maxlength="11" placeholder="GOKATALE" />
+            <flux:input wire:model="smsLimit" type="number" min="0" label="Free SMS per client per month" description="0 = clients must connect their own EgoSMS account." />
+        </div>
+        <div class="flex flex-wrap items-end gap-3">
+            <flux:button type="submit" variant="primary">Save</flux:button>
+            @if ($smsEnabled)
+                <flux:input wire:model="smsTestPhone" type="tel" placeholder="0772 123456" class="max-w-44" aria-label="Test phone number" />
+                <flux:button wire:click="testSms" icon="paper-airplane">Send test SMS</flux:button>
+                <flux:button variant="ghost" wire:click="removeSms" wire:confirm="Turn off the shared SMS account?">Turn off</flux:button>
+            @endif
+            <x-action-message on="saved-sms">Saved.</x-action-message>
+            <span wire:loading wire:target="testSms" class="text-sm text-zinc-500">Sending…</span>
+        </div>
+        @if ($smsResult)
+            <flux:callout :variant="$smsOk ? 'success' : 'danger'" :heading="$smsResult" />
+        @endif
+    </form>
+
+    {{-- AI assistant --}}
+    <form wire:submit="saveAi" class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <flux:heading size="lg">AI writing assistant (Claude)</flux:heading>
+            @if ($aiEnabled)
+                <flux:badge color="green" icon="sparkles">On</flux:badge>
+            @else
+                <flux:badge>Off</flux:badge>
+            @endif
+        </div>
+        <flux:text class="text-sm">
+            Gives clients “Write with AI”: captions, hashtags and titles when posting, suggested replies to comments and Google reviews,
+            and newsletters, written for their own business. Get an API key at
+            <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="underline">console.anthropic.com</a>
+            (add billing credit there). A caption request costs well under one US cent with Sonnet.
+        </flux:text>
+        <div class="grid gap-4 sm:grid-cols-2">
+            <flux:input wire:model="aiKey" type="password" label="Anthropic API key" autocomplete="off" :placeholder="$aiEnabled ? 'Saved. Leave empty to keep' : 'sk-ant-…'" />
+            <flux:select wire:model="aiModel" label="Model">
+                @foreach (\App\Services\Ai\Writer::MODELS as $value => $label)
+                    <option value="{{ $value }}">{{ $label }}</option>
+                @endforeach
+            </flux:select>
+        </div>
+        <flux:input wire:model="aiLimit" type="number" min="1" max="1000" label="AI requests per client per day" description="Keeps costs predictable. Admins have no limit." class="sm:max-w-xs" />
+        <div class="flex flex-wrap items-center gap-3">
+            <flux:button type="submit" variant="primary">Save</flux:button>
+            <flux:button wire:click="testAi" icon="sparkles">Test</flux:button>
+            @if ($aiEnabled)
+                <flux:button variant="ghost" wire:click="removeAi" wire:confirm="Turn off the AI assistant for everyone?">Turn off</flux:button>
+            @endif
+            <x-action-message on="saved-ai">Saved.</x-action-message>
+            <span wire:loading wire:target="testAi" class="text-sm text-zinc-500">Testing…</span>
+        </div>
+        @if ($aiResult)
+            <flux:callout :variant="$aiOk ? 'success' : 'danger'" :heading="$aiResult" />
+        @endif
+    </form>
 
     {{-- Trials --}}
     <form wire:submit="saveBilling" class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">

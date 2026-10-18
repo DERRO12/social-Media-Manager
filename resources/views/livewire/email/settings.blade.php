@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\PublicProfileController;
 use App\Services\Mail\Smtp;
+use App\Services\Sms\EgoSms;
+use App\Services\Sms\Phone;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -17,6 +19,13 @@ new class extends Component {
     public bool $mailOk = false;
 
     public bool $newsletterEnabled = false;
+
+    public string $smsUsername = '';
+    public string $smsPassword = '';
+    public string $smsSenderId = '';
+    public string $smsTestPhone = '';
+    public ?string $smsResult = null;
+    public bool $smsOk = false;
     public string $newsletterText = '';
 
     public function mount(): void
@@ -31,6 +40,8 @@ new class extends Component {
         $this->mailFromName = (string) ($box->from_name ?? $user->publicProfile?->name() ?? $user->name);
         $this->replyTo = (string) ($box->reply_to ?? '');
         $this->dailyLimit = (int) ($box->daily_limit ?? 400);
+        $this->smsUsername = (string) ($user->smsAccount->username ?? '');
+        $this->smsSenderId = (string) ($user->smsAccount->sender_id ?? '');
         $this->newsletterEnabled = (bool) $user->publicProfile?->newsletter_enabled;
         $this->newsletterText = (string) ($user->publicProfile?->newsletter_text ?? '');
     }
@@ -106,6 +117,72 @@ new class extends Component {
         $this->reset('mailUsername', 'mailPassword', 'mailResult');
     }
 
+    public function saveSms(): void
+    {
+        $own = auth()->user()->smsAccount;
+
+        $this->validate([
+            'smsUsername' => ['required', 'string', 'max:100'],
+            'smsPassword' => [$own ? 'nullable' : 'required', 'string', 'max:255'],
+            'smsSenderId' => ['required', 'string', 'max:11', 'regex:/^[A-Za-z0-9 ]+$/'],
+        ], [
+            'smsSenderId.max' => 'Sender IDs are at most 11 letters or numbers.',
+            'smsSenderId.regex' => 'Use letters and numbers only.',
+        ]);
+
+        auth()->user()->smsAccount()->updateOrCreate([], array_filter([
+            'username' => trim($this->smsUsername),
+            'password' => $this->smsPassword !== '' ? $this->smsPassword : null,
+            'sender_id' => trim($this->smsSenderId),
+        ]));
+
+        $this->smsPassword = '';
+        $this->smsResult = null;
+        $this->dispatch('saved-sms');
+    }
+
+    public function testSms(EgoSms $sms): void
+    {
+        $user = auth()->user();
+        $account = EgoSms::accountFor($user);
+        $phone = Phone::normalise($this->smsTestPhone);
+
+        if (! $phone) {
+            [$this->smsOk, $this->smsResult] = [false, 'Enter your phone number to receive the test, e.g. 0772 123456.'];
+
+            return;
+        }
+        if (! $account) {
+            [$this->smsOk, $this->smsResult] = [false, 'Connect your EgoSMS account first.'];
+
+            return;
+        }
+        if (EgoSms::remainingFor($user) <= 0) {
+            [$this->smsOk, $this->smsResult] = [false, 'You have no SMS left this month.'];
+
+            return;
+        }
+
+        $result = $sms->send($account, $phone, 'Test SMS from '.config('app.name').'. SMS sending works!');
+        $this->smsOk = $result['ok'];
+        $this->smsResult = $result['ok'] ? 'Test SMS sent to '.Phone::display($phone).'.' : $result['error'];
+    }
+
+    public function checkBalance(EgoSms $sms): void
+    {
+        $own = auth()->user()->smsAccount;
+        $balance = $own ? $sms->balance(['username' => $own->username, 'password' => $own->password]) : null;
+
+        $this->smsOk = $balance !== null;
+        $this->smsResult = $balance !== null ? "EgoSMS balance: UGX {$balance}" : 'Couldn’t read the balance. Check it at egosms.co.';
+    }
+
+    public function removeSms(): void
+    {
+        auth()->user()->smsAccount?->delete();
+        $this->reset('smsUsername', 'smsPassword', 'smsSenderId', 'smsResult');
+    }
+
     public function saveForm(): void
     {
         $this->validate(['newsletterText' => ['nullable', 'string', 'max:200']]);
@@ -128,6 +205,10 @@ new class extends Component {
 
         return [
             'box' => $user->mailbox,
+            'smsOwn' => $user->smsAccount,
+            'smsShared' => EgoSms::platformAccount() !== null,
+            'smsLeft' => EgoSms::remainingFor($user),
+            'smsAllowance' => EgoSms::monthlyAllowance(),
             'profile' => $profile,
             'live' => $profile && PublicProfileController::isLive($profile),
         ];
@@ -170,6 +251,52 @@ new class extends Component {
                     <flux:callout :variant="$mailOk ? 'success' : 'danger'" :icon="$mailOk ? 'check-circle' : 'exclamation-triangle'" :heading="$mailResult" />
                 @endif
             </form>
+        </section>
+
+        <section class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <flux:heading size="lg">SMS (EgoSMS)</flux:heading>
+                @if ($smsOwn)
+                    <flux:badge color="green" icon="check">Your own account · {{ $smsOwn->sender_id }}</flux:badge>
+                @elseif ($smsShared)
+                    <flux:badge color="sky">{{ number_format($smsLeft) }} of {{ number_format($smsAllowance) }} SMS left this month</flux:badge>
+                @else
+                    <flux:badge>Not set up</flux:badge>
+                @endif
+            </div>
+            <flux:text class="text-sm">
+                @if ($smsShared && ! $smsOwn)
+                    You can send SMS right away with {{ config('app.name') }}’s account ({{ number_format($smsAllowance) }} a month included).
+                    For more, or to show your own business name as the sender, connect your own EgoSMS account.
+                @else
+                    Send SMS through your own <a href="https://www.egosms.co" target="_blank" rel="noopener" class="underline">EgoSMS</a> account: your business name as the sender, and you top up credit with EgoSMS.
+                @endif
+            </flux:text>
+            <form wire:submit="saveSms" class="flex flex-col gap-4">
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <flux:input wire:model="smsUsername" label="EgoSMS username" autocomplete="off" />
+                    <flux:input wire:model="smsPassword" type="password" label="EgoSMS password" autocomplete="new-password" :placeholder="$smsOwn ? 'Saved. Leave empty to keep' : ''" />
+                </div>
+                <flux:input wire:model="smsSenderId" label="Sender ID" maxlength="11" placeholder="AMARASALON" description="The name people see (max 11 letters). Use the sender ID approved on your EgoSMS account." />
+                <div class="flex flex-wrap items-center gap-3">
+                    <flux:button type="submit" variant="primary">Save</flux:button>
+                    @if ($smsOwn)
+                        <flux:button wire:click="checkBalance" icon="banknotes">Check balance</flux:button>
+                        <flux:button variant="ghost" wire:click="removeSms" wire:confirm="Disconnect your EgoSMS account?">Disconnect</flux:button>
+                    @endif
+                    <x-action-message on="saved-sms">Saved.</x-action-message>
+                </div>
+            </form>
+            @if ($smsOwn || $smsShared)
+                <div class="flex flex-wrap items-end gap-2">
+                    <flux:input wire:model="smsTestPhone" type="tel" label="Send a test SMS to" placeholder="0772 123456" class="max-w-48" />
+                    <flux:button wire:click="testSms" icon="paper-airplane">Send test</flux:button>
+                    <span wire:loading wire:target="testSms,checkBalance" class="text-sm text-zinc-500">Working…</span>
+                </div>
+            @endif
+            @if ($smsResult)
+                <flux:callout :variant="$smsOk ? 'success' : 'danger'" :heading="$smsResult" />
+            @endif
         </section>
 
         <section class="flex flex-col gap-4 rounded-xl border border-zinc-200 p-5 dark:border-zinc-700">

@@ -82,6 +82,19 @@ new class extends Component {
         $this->resetErrorBag();
     }
 
+    /** Fill the reply box with an AI-written reply in the business's voice (they can edit it before sending). */
+    public function suggestReply(\App\Services\Ai\Writer $writer): void
+    {
+        $comment = auth()->user()->comments()->with('contentItem')->findOrFail($this->replyingTo);
+
+        try {
+            $this->reply = $writer->reply(auth()->user(), $comment->body, $comment->is_own ? null : $comment->author_name, $comment->contentItem?->title);
+            $this->resetErrorBag('reply');
+        } catch (RuntimeException $e) {
+            $this->addError('reply', $e->getMessage());
+        }
+    }
+
     public function sendReply(): void
     {
         $this->validate(['reply' => ['required', 'string', 'max:2000']]);
@@ -135,6 +148,7 @@ new class extends Component {
 
         return [
             'threads' => $threads,
+            'aiEnabled' => app(\App\Services\Ai\Writer::class)->enabled(),
             'filteredItem' => $this->item ? $user->contentItems()->find($this->item) : null,
             'unreadCount' => $user->comments()->unread()->count(),
             'lastChecked' => $user->socialAccounts()->max('last_synced_at'),

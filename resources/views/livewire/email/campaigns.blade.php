@@ -6,23 +6,14 @@ use Livewire\WithPagination;
 new class extends Component {
     use WithPagination;
 
-    /** Ready-made starting points: [label, subject, body]. */
-    public const TEMPLATES = [
-        'news' => ['Monthly news', 'What’s new at {sender} this month', "Hi {first_name},\n\nHere’s what’s new this month:\n\n## Something new\nTell people about a new product, service or result.\n\n## A tip for you\nShare one useful tip your customers will love.\n\n## This month’s offer\nGive a reason to act now, with a clear deadline.\n\n[Book or order now](https://)\n\nThanks for being part of our community!"],
-        'offer' => ['Special offer', '{first_name}, 20% off this week only', "Hi {first_name},\n\nAs a thank-you for being on our list, you get **20% off** until Sunday.\n\nJust show this email or use the code **THANKYOU20**.\n\n[Claim your offer](https://)\n\nSee you soon!"],
-        'video' => ['New video', 'New video: (your video title)', "Hi {first_name},\n\nI just posted a new video you might like:\n\n**(Your video title)**\n\nIn it I show (what people will learn or see).\n\n[Watch it here](https://)\n\nReply and tell me what you think!"],
-        'blank' => ['Blank', '', ''],
-    ];
+    #[\Livewire\Attributes\Url]
+    public string $kind = 'email';
 
     public function create(string $template = 'blank'): void
     {
-        [, $subject, $body] = self::TEMPLATES[$template] ?? self::TEMPLATES['blank'];
-        $sender = auth()->user()->mailbox?->fromName() ?? auth()->user()->name;
-
-        $campaign = auth()->user()->emailCampaigns()->create([
-            'subject' => str_replace('{sender}', $sender, $subject),
-            'body' => $body,
-        ]);
+        $user = auth()->user();
+        $sender = $user->mailbox?->fromName() ?? $user->smsAccount?->sender_id ?? $user->publicProfile?->name() ?? $user->name;
+        $campaign = $user->emailCampaigns()->create(\App\Support\CampaignTemplates::make($template, $sender));
 
         $this->redirectRoute('email.campaign', $campaign, navigate: true);
     }
@@ -35,7 +26,9 @@ new class extends Component {
         return [
             'campaigns' => $user->emailCampaigns()->latest()->paginate(15),
             'subscribers' => $user->contacts()->subscribed()->count(),
+            'smsSubscribers' => $user->contacts()->smsSubscribed()->count(),
             'hasMailbox' => $user->mailbox !== null,
+            'hasSms' => \App\Services\Sms\EgoSms::accountFor($user) !== null,
             'totals' => [
                 'sent' => (int) (clone $sent)->sum('sent'),
                 'opens' => (int) (clone $sent)->sum('opens'),
@@ -55,7 +48,7 @@ new class extends Component {
     @endunless
 
     <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        @foreach ([['Subscribers', number_format($subscribers), 'users'], ['Campaigns', number_format($campaigns->total()), 'paper-airplane'], ['Emails sent', number_format($totals['sent']), 'envelope'], ['Open rate', $totals['sent'] ? round(100 * $totals['opens'] / $totals['sent']).'%' : '—', 'eye']] as [$label, $value, $icon])
+        @foreach ([['Email subscribers', number_format($subscribers), 'envelope'], ['SMS subscribers', number_format($smsSubscribers), 'device-phone-mobile'], ['Messages sent', number_format($totals['sent']), 'paper-airplane'], ['Email open rate', $totals['sent'] ? round(100 * $totals['opens'] / $totals['sent']).'%' : '—', 'eye']] as [$label, $value, $icon])
             <div class="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4 dark:border-zinc-700">
                 <div class="flex items-center gap-2 text-xs text-zinc-500 sm:text-sm dark:text-zinc-400"><flux:icon :name="$icon" variant="mini" /> {{ $label }}</div>
                 <div class="mt-1 truncate text-xl font-semibold tabular-nums sm:mt-2 sm:text-2xl">{{ $value }}</div>
@@ -64,12 +57,21 @@ new class extends Component {
     </div>
 
     <section class="flex flex-col gap-3">
-        <flux:heading size="lg">Start a new campaign</flux:heading>
-        <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-            @foreach ($this::TEMPLATES as $key => [$label])
-                <button type="button" wire:click="create('{{ $key }}')" class="flex flex-col items-start gap-1 rounded-xl border border-zinc-200 p-4 text-left hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
-                    <flux:icon :name="$key === 'blank' ? 'document' : 'document-text'" class="size-5 text-zinc-500" />
-                    <span class="text-sm font-medium">{{ $label }}</span>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <flux:heading size="lg">Start a new campaign</flux:heading>
+            <flux:radio.group wire:model.live="kind" variant="segmented" size="sm">
+                <flux:radio value="email" label="Email" icon="envelope" />
+                <flux:radio value="sms" label="SMS" icon="device-phone-mobile" />
+            </flux:radio.group>
+        </div>
+        @if ($kind === 'sms' && ! $hasSms)
+            <flux:text class="text-sm text-amber-600">SMS isn’t set up yet. <a href="{{ route('email.settings') }}" wire:navigate class="underline">Connect EgoSMS</a></flux:text>
+        @endif
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-5">
+            @foreach ($kind === 'sms' ? \App\Support\CampaignTemplates::SMS : \App\Support\CampaignTemplates::EMAIL as $key => $template)
+                <button type="button" wire:key="t-{{ $key }}" wire:click="create('{{ $key }}')" class="flex flex-col items-start gap-1 rounded-xl border border-zinc-200 p-4 text-left hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900">
+                    <flux:icon :name="$template[1]" class="size-5 text-zinc-500" />
+                    <span class="text-sm font-medium">{{ $template[0] }}</span>
                 </button>
             @endforeach
         </div>
@@ -80,14 +82,15 @@ new class extends Component {
         <div class="flex flex-col divide-y divide-zinc-200 rounded-xl border border-zinc-200 dark:divide-zinc-700 dark:border-zinc-700">
             @forelse ($campaigns as $campaign)
                 <a href="{{ route('email.campaign', $campaign) }}" wire:navigate wire:key="ec-{{ $campaign->id }}" class="flex flex-wrap items-center gap-3 p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                    <flux:icon :name="$campaign->isSms() ? 'device-phone-mobile' : 'envelope'" variant="mini" class="text-zinc-400" />
                     <div class="min-w-0 flex-1">
-                        <div class="truncate font-medium">{{ $campaign->subject ?: 'Untitled campaign' }}</div>
+                        <div class="truncate font-medium">{{ $campaign->subject ?: ($campaign->isSms() ? \Illuminate\Support\Str::limit($campaign->body, 60) : '') ?: 'Untitled campaign' }}</div>
                         <div class="text-xs text-zinc-500">
                             @if ($campaign->status === 'scheduled')
                                 Scheduled for {{ auth()->user()->localTime($campaign->scheduled_at) }}
                             @elseif ($campaign->started_at)
                                 Sent {{ auth()->user()->localTime($campaign->started_at, 'M j, Y') }} · {{ number_format($campaign->sent) }}/{{ number_format($campaign->recipients) }} delivered
-                                @if ($campaign->openRate() !== null) · {{ $campaign->openRate() }}% opened @endif
+                                @if (! $campaign->isSms() && $campaign->openRate() !== null) · {{ $campaign->openRate() }}% opened @endif
                             @else
                                 Edited {{ $campaign->updated_at->diffForHumans() }}
                             @endif

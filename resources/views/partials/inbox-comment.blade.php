@@ -27,6 +27,9 @@
                     <flux:error name="reply" />
                     <div class="flex gap-2">
                         <flux:button size="sm" type="submit" variant="primary" wire:loading.attr="disabled" wire:target="sendReply">Send reply</flux:button>
+                        @if ($aiEnabled)
+                            <flux:button size="sm" icon="sparkles" wire:click="suggestReply" wire:loading.attr="disabled" wire:target="suggestReply">Suggest a reply</flux:button>
+                        @endif
                         <flux:button size="sm" variant="ghost" wire:click="$set('replyingTo', null)">Cancel</flux:button>
                     </div>
                 </form>

@@ -50,6 +50,18 @@
             @if ($profile->bio)
                 <p class="max-w-2xl whitespace-pre-line text-zinc-700 dark:text-zinc-300">{{ $profile->bio }}</p>
             @endif
+            @if ($profile->whatsappUrl() || $profile->links)
+                <div class="flex w-full max-w-md flex-col gap-2">
+                    @if ($profile->whatsappUrl())
+                        <a href="{{ $profile->whatsappUrl() }}" target="_blank" rel="noopener" class="flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3 font-medium text-white shadow-sm hover:brightness-95">
+                            <flux:icon name="chat-bubble-left-ellipsis" variant="mini" /> Chat on WhatsApp
+                        </a>
+                    @endif
+                    @foreach ($profile->links ?? [] as $link)
+                        <a href="{{ $link['url'] }}" target="_blank" rel="noopener" class="rounded-xl border border-zinc-300 bg-white px-5 py-3 font-medium shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800">{{ $link['label'] }}</a>
+                    @endforeach
+                </div>
+            @endif
             <div class="flex flex-wrap justify-center gap-2">
                 @if ($business?->phone)
                     <a href="tel:{{ preg_replace('/[^0-9+]/', '', $business->phone) }}" class="inline-flex items-center gap-1.5 rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white dark:bg-white dark:text-zinc-900"><flux:icon name="phone" variant="micro" /> Call</a>
@@ -151,10 +163,11 @@
                             <input name="name" value="{{ old('name') }}" placeholder="Your name" autocomplete="name" class="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
                             <input name="email" type="email" required value="{{ old('email') }}" placeholder="you@example.com" autocomplete="email" class="min-w-0 flex-1 rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900">
                         </div>
+                        <input name="phone" type="tel" value="{{ old('phone') }}" placeholder="Phone for SMS offers (optional)" autocomplete="tel" class="rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm sm:max-w-xs dark:border-zinc-700 dark:bg-zinc-900">
                         {{-- Left empty by people; bots fill it in. --}}
                         <input name="company" tabindex="-1" autocomplete="off" aria-hidden="true" class="hidden">
                         <label class="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                            <input type="checkbox" name="consent" value="1" required class="mt-0.5"> I agree to receive emails from {{ $name }}.
+                            <input type="checkbox" name="consent" value="1" required class="mt-0.5"> I agree to receive emails (and SMS, if I gave my number) from {{ $name }}.
                         </label>
                         @if ($errors->newsletter->any())
                             <p class="text-sm text-red-600">{{ $errors->newsletter->first() }}</p>

@@ -2,7 +2,10 @@
     <x-slot:head><meta name="robots" content="noindex"></x-slot:head>
     <section class="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-20 text-center">
         <flux:icon name="envelope" class="size-10 text-zinc-400" />
-        @if ($done ?? false)
+        @if (($done ?? false) && ($sms ?? false))
+            <h1 class="text-2xl font-semibold">You won’t get more SMS</h1>
+            <p class="text-zinc-600 dark:text-zinc-400">{{ \App\Services\Sms\Phone::display($contact->phone) }} is removed from {{ $sender }}’s SMS list.</p>
+        @elseif ($done ?? false)
             <h1 class="text-2xl font-semibold">You’re unsubscribed</h1>
             <p class="text-zinc-600 dark:text-zinc-400">{{ $contact->email }} won’t get more emails from {{ $sender }}.</p>
             <form method="POST" action="{{ route('email.resubscribe', $contact->token) }}">

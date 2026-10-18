@@ -12,6 +12,17 @@ new class extends Component {
     public ?int $mediaId = null;
     public string $title = '';
     public string $caption = '';
+
+    /** A day picked on the calendar (?date=YYYY-MM-DD). */
+    #[\Livewire\Attributes\Url(as: 'date', history: false)]
+    public string $planDate = '';
+
+    /** "Write with AI" panel. */
+    public string $aiTopic = '';
+    public string $aiTone = 'friendly';
+    public string $aiLanguage = 'English';
+    public array $aiResult = [];
+    public ?string $aiError = null;
     /** @var int[] */
     public array $accountIds = [];
     public string $when = 'now';
@@ -45,6 +56,57 @@ new class extends Component {
     public function mount(): void
     {
         $this->timezone = auth()->user()->timezone ?: 'UTC';
+    }
+
+    /**
+     * Opened from the calendar with a day picked: schedule for that day at 10:00. (Runs after Livewire has
+     * read ?date= from the URL, which happens after mount; the date is then cleared so it applies once.)
+     */
+    public function booted(): void
+    {
+        $date = $this->planDate;
+        if ($date === '') {
+            return;
+        }
+
+        $this->planDate = '';
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) && $date >= now($this->timezone)->toDateString()) {
+            $this->when = 'schedule';
+            $this->scheduledAt = $date.'T10:00';
+        }
+    }
+
+    public function writeWithAi(\App\Services\Ai\Writer $writer): void
+    {
+        $topic = trim($this->aiTopic) ?: trim($this->title) ?: trim($this->caption);
+        if (mb_strlen($topic) < 3) {
+            $this->aiError = 'Say in a few words what the post is about.';
+
+            return;
+        }
+
+        $platforms = auth()->user()->socialAccounts()->whereIn('id', $this->accountIds)->get()
+            ->map(fn ($a) => $a->platform->label())->unique()->values()->all();
+
+        try {
+            $this->aiResult = $writer->captions(auth()->user(), mb_substr($topic, 0, 500), $platforms, $this->aiTone, $this->aiLanguage);
+            $this->aiError = null;
+        } catch (RuntimeException $e) {
+            [$this->aiResult, $this->aiError] = [[], $e->getMessage()];
+        }
+    }
+
+    public function useCaption(int $index, bool $withHashtags = true): void
+    {
+        $caption = $this->aiResult['captions'][$index] ?? null;
+        if ($caption === null) {
+            return;
+        }
+
+        $this->caption = $caption.($withHashtags && ! empty($this->aiResult['hashtags']) ? "\n\n".implode(' ', $this->aiResult['hashtags']) : '');
+        if ($this->title === '' && ! empty($this->aiResult['title'])) {
+            $this->title = $this->aiResult['title'];
+        }
     }
 
     /**
@@ -225,6 +287,7 @@ new class extends Component {
             'tiktokCreators' => $this->tiktokCreators($tiktokAccounts),
             'anyBrandedContent' => collect($this->tiktok)->only($tiktokAccounts->pluck('id')->all())
                 ->contains(fn ($c) => $c['disclose'] && $c['branded_content']),
+            'aiEnabled' => app(\App\Services\Ai\Writer::class)->enabled(),
             'hasYouTube' => $selectedPlatforms->contains(Platform::YouTube),
             'hasTikTok' => $selectedPlatforms->contains(Platform::TikTok),
             'hasX' => $selectedPlatforms->contains(Platform::X),
@@ -416,6 +479,44 @@ new class extends Component {
                 </flux:description>
                 <flux:error name="caption" />
             </flux:field>
+
+            @if ($aiEnabled)
+                <div x-data="{ open: @js((bool) $aiResult) }" class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 dark:border-indigo-900 dark:bg-indigo-950/20">
+                    <button type="button" x-on:click="open = ! open" class="flex w-full items-center gap-2 text-left text-sm font-medium">
+                        <flux:icon name="sparkles" variant="mini" class="text-indigo-500" /> Write with AI
+                        <span class="ms-auto text-xs font-normal text-zinc-500">captions, hashtags and a title</span>
+                    </button>
+                    <div x-show="open" x-cloak class="mt-3 flex flex-col gap-3">
+                        <flux:input wire:model="aiTopic" placeholder="What is the post about? e.g. new bridal braids style, 20% off this weekend" />
+                        <div class="grid grid-cols-2 gap-3">
+                            <flux:select wire:model="aiTone" size="sm">
+                                @foreach (\App\Services\Ai\Writer::TONES as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </flux:select>
+                            <flux:select wire:model="aiLanguage" size="sm">
+                                @foreach (\App\Services\Ai\Writer::LANGUAGES as $language)
+                                    <option value="{{ $language }}">{{ $language }}</option>
+                                @endforeach
+                            </flux:select>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <flux:button size="sm" variant="primary" icon="sparkles" wire:click="writeWithAi">{{ $aiResult ? 'Write new ideas' : 'Write captions' }}</flux:button>
+                            <span wire:loading wire:target="writeWithAi" class="text-sm text-zinc-500">Writing…</span>
+                        </div>
+                        @if ($aiError)<flux:text class="text-sm text-red-600">{{ $aiError }}</flux:text>@endif
+                        @foreach ($aiResult['captions'] ?? [] as $i => $option)
+                            <div wire:key="ai-{{ $i }}-{{ md5($option) }}" class="rounded-lg bg-white p-3 text-sm shadow-xs dark:bg-zinc-900">
+                                <p class="whitespace-pre-line">{{ $option }}</p>
+                                <flux:button size="xs" class="mt-2" icon="check" wire:click="useCaption({{ $i }})">Use this</flux:button>
+                            </div>
+                        @endforeach
+                        @if (! empty($aiResult['hashtags']))
+                            <flux:text class="text-xs">Hashtags (added when you click “Use this”): {{ implode(' ', $aiResult['hashtags']) }}</flux:text>
+                        @endif
+                    </div>
+                </div>
+            @endif
 
             @if ($hasYouTube)
                 <div class="grid gap-4 sm:grid-cols-2">

@@ -27,6 +27,7 @@ class NewsletterController extends Controller
         $data = $request->validateWithBag('newsletter', [
             'email' => ['required', 'email:rfc', 'max:255'],
             'name' => ['nullable', 'string', 'max:100'],
+            'phone' => ['nullable', 'string', 'max:25'],
             'consent' => ['accepted'],
         ], ['consent.accepted' => 'Please tick the box to agree to receive emails.']);
 
@@ -36,8 +37,15 @@ class NewsletterController extends Controller
             return back()->with('newsletter', 'Thanks! You’re on the list.'); // the owner sees the limit in their dashboard
         }
 
+        $phone = \App\Services\Sms\Phone::normalise($data['phone'] ?? null);
+        if ($phone && $profile->user->contacts()->where('phone', $phone)->whereKeyNot($contact->id)->exists()) {
+            $phone = null; // that number already belongs to another contact
+        }
+
         $contact->fill([
-            'name' => $data['name'] ?: $contact->name,
+            'name' => ($data['name'] ?? null) ?: $contact->name,
+            'phone' => $phone ?: $contact->phone,
+            'sms_status' => $phone ? Contact::SUBSCRIBED : $contact->sms_status,
             'source' => $contact->exists ? $contact->source : 'form',
             'status' => Contact::SUBSCRIBED,
             'unsubscribed_at' => null,
@@ -73,6 +81,18 @@ class NewsletterController extends Controller
         $contact->update(['status' => Contact::SUBSCRIBED, 'unsubscribed_at' => null]);
 
         return view('newsletter.unsubscribe', ['contact' => $contact, 'sender' => self::senderName($contact), 'back' => true]);
+    }
+
+    /** The short link at the end of every SMS: stops SMS from this sender (email stays as it was). */
+    public function smsOptOut(string $code): View
+    {
+        [$id, $prefix] = array_pad(explode('-', $code, 2), 2, '');
+        $contact = Contact::with('user.publicProfile')->find((int) $id);
+        abort_unless($contact && strlen($prefix) === 8 && hash_equals(substr($contact->token, 0, 8), $prefix), 404);
+
+        $contact->sms_status === Contact::UNSUBSCRIBED || $contact->unsubscribeSms();
+
+        return view('newsletter.unsubscribe', ['contact' => $contact, 'sender' => self::senderName($contact), 'done' => true, 'sms' => true]);
     }
 
     /** 1×1 image in each email: records the first open. The link is signed so counts can't be faked. */

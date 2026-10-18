@@ -9,9 +9,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /** A newsletter a client writes and sends to their contacts. */
 class EmailCampaign extends Model
 {
-    protected $fillable = ['subject', 'preheader', 'body', 'tag', 'status', 'scheduled_at', 'started_at', 'finished_at', 'recipients', 'sent', 'failed', 'opens', 'error'];
+    protected $fillable = ['channel', 'subject', 'preheader', 'body', 'tag', 'status', 'scheduled_at', 'started_at', 'finished_at', 'recipients', 'sent', 'failed', 'opens', 'error'];
 
-    protected $attributes = ['status' => 'draft', 'subject' => ''];
+    protected $attributes = ['status' => 'draft', 'subject' => '', 'channel' => 'email'];
+
+    public function isSms(): bool
+    {
+        return $this->channel === 'sms';
+    }
 
     protected function casts(): array
     {

@@ -18,11 +18,11 @@ class PublicProfile extends Model
     /** Handles that would clash with app pages or look official. */
     public const RESERVED = ['admin', 'api', 'app', 'login', 'register', 'support', 'help', 'about', 'www', 'mail', 'root', 'socialhub', 'gokatale'];
 
-    protected $fillable = ['handle', 'display_name', 'headline', 'bio', 'location', 'website', 'is_public', 'seo_title', 'seo_description', 'avatar_path', 'show_business', 'newsletter_enabled', 'newsletter_text'];
+    protected $fillable = ['handle', 'display_name', 'headline', 'bio', 'location', 'website', 'is_public', 'seo_title', 'seo_description', 'avatar_path', 'show_business', 'newsletter_enabled', 'newsletter_text', 'links', 'whatsapp'];
 
     protected function casts(): array
     {
-        return ['is_public' => 'boolean', 'show_business' => 'boolean', 'newsletter_enabled' => 'boolean'];
+        return ['is_public' => 'boolean', 'show_business' => 'boolean', 'newsletter_enabled' => 'boolean', 'links' => 'array'];
     }
 
     public function getRouteKeyName(): string
@@ -74,6 +74,12 @@ class PublicProfile extends Model
     public function searchDescription(): string
     {
         return $this->seo_description ?: ($this->headline ?: Str::limit((string) $this->bio, 155)) ?: 'Videos, posts and photos by '.$this->name().'.';
+    }
+
+    /** wa.me chat link for the WhatsApp button, with a friendly first message. */
+    public function whatsappUrl(): ?string
+    {
+        return $this->whatsapp ? 'https://wa.me/'.$this->whatsapp.'?text='.rawurlencode('Hi '.$this->name().', I found you on '.config('app.name').'.') : null;
     }
 
     public function url(): string

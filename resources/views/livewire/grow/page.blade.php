@@ -24,6 +24,22 @@ new class extends Component {
     public string $seoDescription = '';
     public bool $showBusiness = false;
     public $avatar = null;
+    /** Link-in-bio buttons: [['label' => …, 'url' => …], …] */
+    public array $bioLinks = [];
+    public string $whatsapp = '';
+
+    public function addLink(): void
+    {
+        if (count($this->bioLinks) < 8) {
+            $this->bioLinks[] = ['label' => '', 'url' => ''];
+        }
+    }
+
+    public function removeLink(int $index): void
+    {
+        unset($this->bioLinks[$index]);
+        $this->bioLinks = array_values($this->bioLinks);
+    }
 
     public function mount(): void
     {
@@ -40,6 +56,8 @@ new class extends Component {
         $this->seoTitle = (string) $p?->seo_title;
         $this->seoDescription = (string) $p?->seo_description;
         $this->showBusiness = (bool) ($p?->show_business ?? $user->businessProfile !== null);
+        $this->bioLinks = array_values($p?->links ?? []);
+        $this->whatsapp = (string) ($p?->whatsapp ? '+'.$p->whatsapp : '');
     }
 
     private function suggestHandle(string $name): string
@@ -69,11 +87,25 @@ new class extends Component {
             'seoTitle' => ['nullable', 'string', 'max:70'],
             'seoDescription' => ['nullable', 'string', 'max:170'],
             'avatar' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'bioLinks' => ['array', 'max:8'],
+            'bioLinks.*.label' => ['required_with:bioLinks.*.url', 'nullable', 'string', 'max:40'],
+            'bioLinks.*.url' => ['required_with:bioLinks.*.label', 'nullable', 'url:http,https', 'max:500'],
+            'whatsapp' => ['nullable', 'string', 'max:25'],
         ], [
+            'bioLinks.*.url.url' => 'Enter a full web address starting with https://',
+            'bioLinks.*.label.required_with' => 'Give the button a name.',
+            'bioLinks.*.url.required_with' => 'Add the link for this button.',
             'handle.regex' => 'Use lowercase letters, numbers and single dashes, e.g. amara-studio.',
             'handle.not_in' => 'That address is reserved. Please choose another.',
             'handle.unique' => 'That address is taken. Please choose another.',
         ]);
+
+        $whatsapp = \App\Services\Sms\Phone::normalise($this->whatsapp);
+        if ($this->whatsapp !== '' && ! $whatsapp) {
+            $this->addError('whatsapp', 'Enter your WhatsApp number, e.g. 0772 123456 or +256 772 123456.');
+
+            return;
+        }
 
         $avatarPath = $profile?->avatar_path;
         if ($this->avatar) {
@@ -101,6 +133,9 @@ new class extends Component {
             'seo_description' => $this->seoDescription ?: null,
             'avatar_path' => $avatarPath,
             'show_business' => $this->showBusiness,
+            'links' => collect($this->bioLinks)->filter(fn ($l) => filled($l['label'] ?? null) && filled($l['url'] ?? null))
+                ->map(fn ($l) => ['label' => trim($l['label']), 'url' => trim($l['url'])])->values()->all() ?: null,
+            'whatsapp' => $whatsapp,
         ]);
 
         if (PublicProfileController::isLive($profile->fresh())) {
@@ -191,6 +226,24 @@ new class extends Component {
                 <flux:input wire:model="headline" label="Headline" placeholder="Natural hair care tips and bridal styling in Kampala" description="Shown under your name and in Google results. Use the words people search." />
                 <flux:textarea wire:model="bio" label="About" rows="4" />
                 <flux:input wire:model="website" type="url" label="Website" placeholder="https://…" />
+                <flux:input wire:model="whatsapp" type="tel" label="WhatsApp number (optional)" placeholder="0772 123456" description="Adds a “Chat on WhatsApp” button to your page." />
+
+                <div class="flex flex-col gap-2">
+                    <flux:label>Link-in-bio buttons</flux:label>
+                    <flux:text class="text-xs">Put your page link in your Instagram and TikTok bio; these buttons take people to your shop, menu, booking page or anything else.</flux:text>
+                    @foreach ($bioLinks as $i => $link)
+                        <div wire:key="bl-{{ $i }}" class="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[180px_1fr_auto]">
+                            <flux:input wire:model="bioLinks.{{ $i }}.label" placeholder="Book now" maxlength="40" aria-label="Button name" class="max-sm:col-span-2" />
+                            <flux:input wire:model="bioLinks.{{ $i }}.url" placeholder="https://…" aria-label="Button link" />
+                            <flux:button variant="ghost" icon="x-mark" wire:click="removeLink({{ $i }})" aria-label="Remove button" />
+                        </div>
+                        <flux:error name="bioLinks.{{ $i }}.label" />
+                        <flux:error name="bioLinks.{{ $i }}.url" />
+                    @endforeach
+                    @if (count($bioLinks) < 8)
+                        <div><flux:button size="sm" icon="plus" wire:click="addLink">Add a button</flux:button></div>
+                    @endif
+                </div>
 
                 <flux:field>
                     <flux:label>Page picture or logo</flux:label>

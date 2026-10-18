@@ -68,9 +68,20 @@ key file at `/indexnow.txt`; turn off with `INDEXNOW_ENABLED=false`).
 | Where | What it does |
 |---|---|
 | **Admin → Settings → Email** | Connect the site's mailbox: Gmail / Google Workspace with an **app password** (step-by-step help on the page), Outlook, Zoho or any SMTP server, with a "send test email" button. It sends password resets, email confirmation (optional switch "New sign-ups must confirm their email", existing users are never locked out), welcome emails, a new sign-up alert to admins, trial-ending and plan-ended emails, payment updates, failed post alerts and certificates. |
-| **Email marketing → Mailbox & sign-up form** | Each client connects **their own** Gmail (app password) so newsletters come from their address, sets a daily limit (Gmail: about 500 a day) and turns on a sign-up form on their public page. |
-| **Email marketing → Contacts** | Add people (with a consent tick), import a CSV from Excel or Google Sheets, tag them, export, unsubscribe or delete. Up to 5,000 contacts per client. |
-| **Email marketing → Campaigns** | Templates (monthly news, offer, new video), a simple editor (bold, headings, links, images, `{first_name}`), live preview, test send, send now or schedule, send to everyone or one tag. Sending runs in the background, paced and capped at the mailbox's daily limit (it continues the next day), pauses with a clear message if the password stops working, and shows delivered, opened and failed. Every email has an unsubscribe link and Gmail's one-click unsubscribe headers. |
+| **Admin → Settings → SMS (EgoSMS)** | The platform's [EgoSMS](https://www.egosms.co) account (username, password, sender ID) shared by clients up to a monthly allowance each (0 = clients must use their own), with a test SMS and balance check. |
+| **Email & SMS → Settings & sign-up form** | Each client connects **their own** Gmail (app password) so newsletters come from their address, sets a daily limit (Gmail: about 500 a day), optionally connects **their own EgoSMS account** (their sender ID, their credit), and turns on a sign-up form (email + optional phone) on their public page. |
+| **Email & SMS → Contacts** | Emails and/or phone numbers (local numbers like 0772 123456 become +256…), added one by one with a consent tick or imported from a CSV (Excel, Google Sheets, phone contacts export), tagged, exported. Separate email and SMS opt-outs. Up to 5,000 contacts per client, **visible only to that client**. |
+| **Email & SMS → Campaigns** | 13 email templates (welcome, monthly news, offer, flash sale, launch, event, tips, customer story, new video, ask for reviews, holiday, we miss you) and 7 SMS templates, a simple editor (bold, headings, links, images, `{first_name}`, `{review_link}`, `{page_link}`), live email or phone preview with SMS character and part counter, AI writing, test send, send now or schedule, everyone or one tag. Sending runs in the background, paced and capped (email: mailbox daily limit; SMS: monthly allowance), pauses with a clear message if a password stops working or SMS credit runs out (Resume continues), and shows delivered, opened (email), cost (SMS) and failed. Every email has an unsubscribe link and one-click unsubscribe headers; every SMS ends with a short opt-out link. |
+
+## Marketing tools
+
+| Page | What it does |
+|---|---|
+| **AI writing assistant** | Admin → Settings → AI: an Anthropic (Claude) API key, the model and a daily limit per client. Clients then get **Write with AI**: 3 captions + hashtags + a title in Create post (tone and language: English, Luganda, Swahili, French…), **Suggest a reply** for comments and Google reviews in the inbox, and newsletters and SMS in campaigns, all written for their own business details. |
+| **Calendar** | Month view of scheduled and published posts (an agenda list on phones) with marketing days: Ugandan and East African holidays, awareness days, Mother's/Father's Day, Easter, Black Friday, each with a content idea. Click a day to plan a post for it. |
+| **Insights** | Best day and time to post (heatmap of average likes + comments + shares), results by platform and weekday, engagement rate and the top 10 posts, for 30/90/365 days or all time. |
+| **Links & QR codes** | Short trackable links (`/go/abc123`) with campaign (UTM) tags picked by where they're shared, clicks per day, and a printable QR code for each. Ready-made QR codes for the public page and the Google review link. Link previews and bots aren't counted. |
+| **Link in bio** | Up to 8 buttons and a **Chat on WhatsApp** button on the public page, so one link in an Instagram or TikTok bio leads everywhere. |
 
 ## What a client can do
 
@@ -85,7 +96,8 @@ key file at `/indexnow.txt`; turn off with `INDEXNOW_ENABLED=false`).
 | **Trending** | Live YouTube trending videos and music by country, plus official trend links for TikTok, Instagram, X, Facebook |
 | **Academy** | Social media marketing courses, quizzes and certificates |
 | **Grow on Google** | Business Profile builder (and creating it on Google), public page, photos for Google Images, SEO checker |
-| **Email marketing** | Their own mailbox, a sign-up form, contacts and newsletter campaigns |
+| **Email & SMS** | Their own mailbox and EgoSMS, a sign-up form, private contacts (emails and phones), newsletter and SMS campaigns |
+| **Calendar, Insights, Links & QR codes** | Plan posts around key dates, see the best time to post, track clicks and print QR codes |
 | **Plan & billing** | Current plan, trial days left, usage against limits, pay by card, PayPal or Mobile Money, payment history |
 
 On phones the app has a bottom tab bar (Home, Create, Inbox, Content, Learn) and the full menu behind the ☰ button.
@@ -197,7 +209,10 @@ TikTok audit, LinkedIn product approval). Plan for this early. It usually takes 
 - `app/Models/Setting.php` — admin-editable settings (secrets encrypted)
 - `app/Services/Academy/*`, `resources/academy/*.php` — course progress, certificates and the ready-made course library
 - `app/Services/Seo/*`, `app/Http/Controllers/PublicProfileController.php`, `app/Support/ProfileSchema.php` — SEO checker (safe fetching), photo optimisation, public pages, structured data, sitemap, robots.txt, IndexNow
-- `app/Services/Mail/*`, `app/Jobs/SendCampaign.php`, `app/Http/Controllers/NewsletterController.php` — site email settings, client mailboxes, campaigns, sign-up form, unsubscribe and opens
+- `app/Services/Mail/*`, `app/Services/Sms/*`, `app/Jobs/SendCampaign.php`, `app/Http/Controllers/NewsletterController.php` — site email settings, client mailboxes, EgoSMS, email and SMS campaigns, sign-up form, unsubscribe/opt-out and opens
+- `app/Support/CampaignTemplates.php`, `app/Support/MarketingDates.php` — campaign templates and the calendar's marketing days (add your own there)
+- `app/Services/Ai/Writer.php` — the AI writing assistant (Claude)
+- `app/Http/Controllers/LinkController.php`, `app/Models/ShortLink.php`, `app/Support/Qr.php` — short links, click counts and QR codes
 - `app/Services/Social/Drivers/GoogleBusinessDriver.php` — Google Business Profile: locations, reviews, replies, creating and updating the listing
 - `tests/Feature/*` — client isolation, publishing, billing and limits tests (`php artisan test`)
 
