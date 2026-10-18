@@ -49,7 +49,7 @@ new class extends Component {
             <flux:heading size="xl">Trending</flux:heading>
             <flux:text>What’s popular right now, to inspire your next post.</flux:text>
         </div>
-        <flux:select wire:model.live="country" class="w-56" aria-label="Country">
+        <flux:select wire:model.live="country" class="w-full sm:w-56" aria-label="Country">
             @foreach ($countries as $code => $name)
                 <option value="{{ $code }}">{{ $name }}</option>
             @endforeach

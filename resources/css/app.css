@@ -68,3 +68,15 @@ select:focus[data-flux-control] {
 [x-cloak] {
     display: none !important;
 }
+
+/* Small screens: long links and codes wrap instead of pushing the page sideways. */
+code, .break-anywhere {
+    overflow-wrap: anywhere;
+}
+
+/* Room for the phone tab bar, including the iPhone home indicator. */
+@media (max-width: 1023px) {
+    [data-flux-main] {
+        padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+    }
+}

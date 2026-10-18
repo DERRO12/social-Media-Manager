@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Course;
+use App\Services\Academy\CourseLibrary;
 use App\Services\Academy\StarterCourse;
 use Livewire\Volt\Component;
 
@@ -32,12 +33,43 @@ new class extends Component {
         $this->redirectRoute('admin.course', $course, navigate: true);
     }
 
+    public function installFromLibrary(string $slug, CourseLibrary $library): void
+    {
+        $course = $library->install($slug);
+
+        session()->flash('status', "“{$course->title}” was added as a draft. Review it, add YouTube videos if you like, then publish it.");
+        $this->redirectRoute('admin.course', $course, navigate: true);
+    }
+
+    /** Add every library course, optionally publishing them straight away. */
+    public function installAll(bool $publish = false): void
+    {
+        $courses = app(CourseLibrary::class)->installAll();
+
+        if ($publish) {
+            collect($courses)->each->update(['is_published' => true]);
+        }
+
+        session()->flash('status', count($courses).' library courses are in your Academy'.($publish ? ' and published.' : ' as drafts.'));
+        $this->redirectRoute('admin.courses', navigate: true);
+    }
+
     public function with(): array
     {
+        $installed = Course::pluck('slug')->all();
+
         return [
             'courses' => Course::withCount(['lessons', 'enrollments', 'certificates', 'questions'])
                 ->orderByDesc('is_featured')->orderBy('sort')->orderBy('id')->get(),
-            'hasStarter' => Course::where('slug', StarterCourse::SLUG)->exists(),
+            'library' => collect(app(CourseLibrary::class)->all())->map(fn ($def) => [
+                'slug' => $def['slug'],
+                'title' => $def['title'],
+                'summary' => $def['summary'],
+                'level' => \App\Models\Course::LEVELS[$def['level'] ?? 'beginner'] ?? 'Beginner',
+                'lessons' => collect($def['modules'])->sum(fn ($m) => count($m[1])),
+                'questions' => count($def['questions']),
+                'installed' => in_array($def['slug'], $installed, true),
+            ])->values(),
         ];
     }
 }; ?>
@@ -56,18 +88,42 @@ new class extends Component {
         </div>
     </div>
 
-    @unless ($hasStarter)
-        <div class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-dashed border-zinc-300 p-5 dark:border-zinc-600">
-            <div>
-                <flux:heading>Start with a ready-made course</flux:heading>
-                <flux:text class="text-sm">
-                    “Social Media Marketing Foundations”: 4 modules, 12 written lessons and a 12-question final exam with a certificate.
-                    It’s added as a draft so you can edit everything and add YouTube videos before publishing.
-                </flux:text>
+    {{-- Ready-made courses --}}
+    @if ($library->where('installed', false)->isNotEmpty())
+        <section x-data="{ open: {{ $courses->isEmpty() ? 'true' : 'false' }} }" class="rounded-xl border border-dashed border-zinc-300 p-5 dark:border-zinc-600">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <flux:heading>Course library: {{ $library->count() }} ready-made courses</flux:heading>
+                    <flux:text class="text-sm">
+                        A full social media academy: foundations, TikTok, Instagram, YouTube, Facebook, LinkedIn &amp; X, phone video and Google.
+                        Each has written lessons, a final quiz and a certificate. Add them as drafts to edit first, or publish them at once.
+                    </flux:text>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <flux:button size="sm" variant="ghost" x-on:click="open = ! open" x-text="open ? 'Hide list' : 'Show list'"></flux:button>
+                    <flux:button size="sm" icon="sparkles" wire:click="installAll">Add all as drafts</flux:button>
+                    <flux:button size="sm" variant="primary" icon="rocket-launch" wire:click="installAll(true)"
+                        wire:confirm="Add every library course and publish them now, so students can start straight away?">Add all &amp; publish</flux:button>
+                </div>
             </div>
-            <flux:button wire:click="installStarter" icon="sparkles">Add starter course</flux:button>
-        </div>
-    @endunless
+            <div x-show="open" x-cloak class="mt-4 grid gap-3 md:grid-cols-2">
+                @foreach ($library as $item)
+                    <div wire:key="lib-{{ $item['slug'] }}" class="flex items-start gap-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-medium">{{ $item['title'] }}</div>
+                            <div class="text-xs text-zinc-500">{{ $item['level'] }} · {{ $item['lessons'] }} lessons · {{ $item['questions'] }}-question quiz</div>
+                            <flux:text class="mt-1 text-sm">{{ $item['summary'] }}</flux:text>
+                        </div>
+                        @if ($item['installed'])
+                            <flux:badge size="sm" color="green">Added</flux:badge>
+                        @else
+                            <flux:button size="sm" icon="plus" wire:click="installFromLibrary('{{ $item['slug'] }}')">Add</flux:button>
+                        @endif
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
 
     <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         @forelse ($courses as $course)

@@ -61,14 +61,14 @@ new class extends Component {
     </div>
 
     <div class="flex flex-wrap gap-3">
-        <flux:input wire:model.live.debounce.400ms="search" icon="magnifying-glass" placeholder="Search captions…" class="max-w-xs" />
-        <flux:select wire:model.live="platform" class="w-44">
+        <flux:input wire:model.live.debounce.400ms="search" icon="magnifying-glass" placeholder="Search captions…" class="w-full sm:max-w-xs" />
+        <flux:select wire:model.live="platform" class="min-w-0 max-sm:flex-1 sm:w-44">
             <option value="">All platforms</option>
             @foreach (Platform::cases() as $p)
                 <option value="{{ $p->value }}">{{ $p->label() }}</option>
             @endforeach
         </flux:select>
-        <flux:select wire:model.live="sort" class="w-44">
+        <flux:select wire:model.live="sort" class="min-w-0 max-sm:flex-1 sm:w-44">
             <option value="published_at">Newest</option>
             <option value="views">Most views</option>
             <option value="likes">Most likes</option>

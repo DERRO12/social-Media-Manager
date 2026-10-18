@@ -22,6 +22,7 @@
                     <flux:navlist.item icon="chat-bubble-left-right" :href="route('inbox')" :current="request()->routeIs('inbox')" :badge="$unread ?: null" wire:navigate>Inbox</flux:navlist.item>
                     <flux:navlist.item icon="fire" :href="route('trending')" :current="request()->routeIs('trending')" wire:navigate>Trending</flux:navlist.item>
                     <flux:navlist.item icon="academic-cap" :href="route('academy')" :current="request()->routeIs('academy*')" wire:navigate>Academy</flux:navlist.item>
+                    <flux:navlist.item icon="magnifying-glass-circle" :href="route('grow.business')" :current="request()->routeIs('grow*')" wire:navigate>Grow on Google</flux:navlist.item>
                     <flux:navlist.item icon="link" :href="route('accounts')" :current="request()->routeIs('accounts')" wire:navigate>Connected accounts</flux:navlist.item>
                     @unless (auth()->user()->isAdmin())
                         <flux:navlist.item icon="credit-card" :href="route('billing')" :current="request()->routeIs('billing')" wire:navigate>Plan &amp; billing</flux:navlist.item>
@@ -90,10 +91,21 @@
         </flux:sidebar>
 
         <!-- Mobile User Menu -->
-        <flux:header class="lg:hidden">
-            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
+        <flux:header class="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 !px-3 backdrop-blur lg:hidden dark:border-zinc-700 dark:bg-zinc-900/90">
+            <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" aria-label="Open menu" />
+
+            <a href="{{ route('dashboard') }}" class="ml-1 flex min-w-0 items-center" wire:navigate>
+                <x-app-logo class="size-7" href="#"></x-app-logo>
+            </a>
 
             <flux:spacer />
+
+            <a href="{{ route('inbox') }}" class="relative mr-1 rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800" aria-label="Inbox" wire:navigate>
+                <flux:icon.bell variant="outline" class="size-5" />
+                @if ($unread)
+                    <span class="absolute right-1 top-1 flex min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-4 text-white">{{ $unread > 99 ? '99+' : $unread }}</span>
+                @endif
+            </a>
 
             <flux:dropdown position="top" align="end">
                 <flux:profile
@@ -140,6 +152,39 @@
         </flux:header>
 
         {{ $slot }}
+
+        <!-- Phone tab bar: the five places people go most, one thumb away -->
+        @php($tabs = [
+            ['dashboard', 'home', 'Home', 'dashboard'],
+            ['compose', 'plus-circle', 'Create', 'compose'],
+            ['inbox', 'chat-bubble-left-right', 'Inbox', 'inbox'],
+            ['content', 'film', 'Content', 'content'],
+            ['academy', 'academic-cap', 'Learn', 'academy*'],
+        ])
+        <nav class="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden dark:border-zinc-700 dark:bg-zinc-900/95" aria-label="Main">
+            <div class="mx-auto grid max-w-md grid-cols-5">
+                @foreach ($tabs as [$route, $icon, $label, $pattern])
+                    @php($active = request()->routeIs($pattern))
+                    <a href="{{ route($route) }}" wire:navigate @class([
+                        'relative flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium',
+                        'text-zinc-900 dark:text-white' => $active,
+                        'text-zinc-500 dark:text-zinc-400' => ! $active,
+                    ]) @if ($active) aria-current="page" @endif>
+                        @if ($route === 'compose')
+                            <span class="-mt-1 flex size-8 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 via-fuchsia-500 to-orange-400 text-white shadow">
+                                <flux:icon.plus variant="mini" />
+                            </span>
+                        @else
+                            <flux:icon :name="$icon" :variant="$active ? 'solid' : 'outline'" class="size-6" />
+                        @endif
+                        {{ $label }}
+                        @if ($route === 'inbox' && $unread)
+                            <span class="absolute left-1/2 top-1 ml-2 min-w-4 rounded-full bg-rose-500 px-1 text-center text-[10px] font-semibold leading-4 text-white">{{ $unread > 99 ? '99+' : $unread }}</span>
+                        @endif
+                    </a>
+                @endforeach
+            </div>
+        </nav>
 
         @fluxScripts
     </body>

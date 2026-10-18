@@ -5,6 +5,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ChunkedUploadController;
 use App\Http\Controllers\GoogleLoginController;
 use App\Http\Controllers\ImpersonationController;
+use App\Http\Controllers\PublicProfileController;
 use App\Http\Controllers\SocialAuthController;
 use App\Http\Controllers\StripeWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,12 @@ Route::get('courses', [AcademyPublicController::class, 'index'])->name('courses.
 Route::get('courses/{course:slug}', [AcademyPublicController::class, 'show'])->name('courses.show');
 Route::get('certificates/{certificate:code}', [AcademyPublicController::class, 'certificate'])->name('certificates.show');
 
+// Search visibility: clients' public pages, a page per video, the sitemap and robots.txt.
+Route::get('p/{profile:handle}', [PublicProfileController::class, 'show'])->name('profiles.show');
+Route::get('p/{profile:handle}/v/{item}/{slug?}', [PublicProfileController::class, 'item'])->name('profiles.item');
+Route::get('sitemap.xml', [PublicProfileController::class, 'sitemap'])->name('sitemap');
+Route::get('robots.txt', [PublicProfileController::class, 'robots'])->name('robots');
+
 // Client workspace: every page only shows the signed-in client's own data,
 // and needs a running trial or an active plan ("has-access").
 Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(function () {
@@ -39,6 +46,12 @@ Route::middleware(['auth', 'verified', 'not-suspended', 'has-access'])->group(fu
     Volt::route('content', 'content.index')->name('content');
     Volt::route('inbox', 'inbox.index')->name('inbox');
     Volt::route('trending', 'trending.index')->name('trending');
+
+    // Grow on Google: Business Profile builder, SEO checker, public page settings.
+    Route::redirect('grow', 'grow/business-profile')->name('grow');
+    Volt::route('grow/business-profile', 'grow.business')->name('grow.business');
+    Volt::route('grow/seo', 'grow.seo')->name('grow.seo');
+    Volt::route('grow/public-page', 'grow.page')->name('grow.page');
 
     // Academy (studying needs a trial or plan; the public pages above don't).
     Volt::route('academy', 'academy.index')->name('academy');

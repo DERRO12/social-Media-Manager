@@ -23,6 +23,9 @@
         ['chart-bar', 'All your content and stats', 'See every video and post with views, likes, comments and shares, including ones you posted outside the app.'],
         ['shield-check', 'Secure connections', 'You log in on each platform’s own page. We never see your passwords, and access tokens are stored encrypted.'],
         ['bolt', 'Always in sync', 'New content, metrics and comments are pulled in automatically, so your dashboard is always up to date.'],
+        ['map-pin', 'Google Business Profile builder', 'Prepare a complete profile with a ready-made description, a strength score and a review link, so you show up on Google Maps.'],
+        ['magnifying-glass', 'SEO checker', 'Check any page of your website and get a score with plain-language fixes for titles, speed, mobile, images and more.'],
+        ['globe-alt', 'Get found on Google', 'Turn on your public page: every video gets its own search-friendly page, listed in our sitemap so Google can find it.'],
     ];
 
     $faqs = [

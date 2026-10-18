@@ -57,20 +57,20 @@ new class extends Component {
         <flux:button variant="primary" icon="users" :href="route('admin.clients')" wire:navigate>Manage clients</flux:button>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
         @foreach ($stats as $stat)
-            <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+            <div class="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4 dark:border-zinc-700">
                 <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ $stat['label'] }}</div>
-                <div class="mt-2 text-2xl font-semibold tabular-nums">{{ \App\Support\Metric::full($stat['value']) }}</div>
+                <div class="mt-1 truncate text-xl font-semibold tabular-nums sm:mt-2 sm:text-2xl">{{ \App\Support\Metric::full($stat['value']) }}</div>
             </div>
         @endforeach
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         @foreach ($billing as $stat)
-            <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+            <div class="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4 dark:border-zinc-700">
                 <div class="text-sm text-zinc-500 dark:text-zinc-400">{{ $stat['label'] }}</div>
-                <div class="mt-2 text-2xl font-semibold tabular-nums">{{ is_int($stat['value']) ? \App\Support\Metric::full($stat['value']) : $stat['value'] }}</div>
+                <div class="mt-1 truncate text-xl font-semibold tabular-nums sm:mt-2 sm:text-2xl">{{ is_int($stat['value']) ? \App\Support\Metric::full($stat['value']) : $stat['value'] }}</div>
             </div>
         @endforeach
     </div>

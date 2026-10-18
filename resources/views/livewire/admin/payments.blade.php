@@ -69,12 +69,12 @@ new class extends Component {
             <flux:heading size="xl">Payments</flux:heading>
             <flux:text>Clients who paid with a PayPal or Yo! Payments link. Check the reference in your account, then approve to activate their plan.</flux:text>
         </div>
-        <flux:radio.group wire:model.live="status" variant="segmented">
+        <div class="max-w-full overflow-x-auto"><flux:radio.group wire:model.live="status" variant="segmented">
             <flux:radio value="pending" :label="'To check ('.$pendingCount.')'" />
             <flux:radio value="approved" label="Approved" />
             <flux:radio value="rejected" label="Rejected" />
             <flux:radio value="all" label="All" />
-        </flux:radio.group>
+        </flux:radio.group></div>
     </div>
 
     <div class="flex flex-col gap-3">

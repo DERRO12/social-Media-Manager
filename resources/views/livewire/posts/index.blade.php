@@ -68,7 +68,7 @@ new class extends Component {
             <flux:text>Every post you created here and how it did on each platform.</flux:text>
         </div>
         <div class="flex items-center gap-3">
-            <flux:select wire:model.live="status" class="w-44">
+            <flux:select wire:model.live="status" class="min-w-0 max-sm:flex-1 sm:w-44">
                 <option value="">All statuses</option>
                 @foreach (PostStatus::cases() as $s)
                     <option value="{{ $s->value }}">{{ $s->label() }}</option>

@@ -23,6 +23,7 @@ class ContentItem extends Model
         'comments_synced_count',
         'comments_synced_at',
         'shares',
+        'hidden_from_profile',
     ];
 
     protected function casts(): array
@@ -30,6 +31,7 @@ class ContentItem extends Model
         return [
             'published_at' => 'datetime',
             'comments_synced_at' => 'datetime',
+            'hidden_from_profile' => 'boolean',
         ];
     }
 

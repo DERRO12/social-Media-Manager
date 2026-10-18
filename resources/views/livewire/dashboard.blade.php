@@ -42,14 +42,14 @@ new class extends Component {
         <flux:button variant="primary" icon="plus" :href="route('compose')" wire:navigate>Create post</flux:button>
     </div>
 
-    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+    <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-6">
         @foreach ($stats as $stat)
-            <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                <div class="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <div class="min-w-0 rounded-xl border border-zinc-200 p-3 sm:p-4 dark:border-zinc-700">
+                <div class="flex min-w-0 items-center gap-2 text-xs text-zinc-500 sm:text-sm dark:text-zinc-400">
                     <flux:icon :name="$stat['icon']" variant="mini" />
                     {{ $stat['label'] }}
                 </div>
-                <div class="mt-2 text-2xl font-semibold tabular-nums">{{ \App\Support\Metric::short($stat['value']) }}</div>
+                <div class="mt-1 truncate text-xl font-semibold tabular-nums sm:mt-2 sm:text-2xl">{{ \App\Support\Metric::short($stat['value']) }}</div>
             </div>
         @endforeach
     </div>

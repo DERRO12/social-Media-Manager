@@ -7,6 +7,7 @@
     @if ($description)
         <meta name="description" content="{{ $description }}">
     @endif
+    {{ $head ?? '' }}
 </head>
 <body class="min-h-screen bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
     <header x-data="{ open: false }" class="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">

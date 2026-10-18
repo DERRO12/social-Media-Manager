@@ -1,5 +1,5 @@
 <x-layouts.app.sidebar>
-    <flux:main>
+    <flux:main class="max-sm:!px-4 max-sm:!pt-4">
         @if (session('impersonator_id'))
             <div class="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-amber-100 px-4 py-2 text-sm text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">
                 <span>You are managing <strong>{{ auth()->user()->name }}</strong>'s workspace as admin.</span>

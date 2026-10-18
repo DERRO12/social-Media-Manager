@@ -6,9 +6,8 @@ use App\Models\Course;
 use Illuminate\Support\Facades\DB;
 
 /**
- * A complete beginner course the admin can add with one click (Admin → Courses), so the Academy
- * isn't empty on day one. It's created as a draft: the admin can edit any text, add YouTube videos
- * to lessons, then publish.
+ * The first course of the library (see CourseLibrary): a complete beginner course so the Academy
+ * isn't empty on day one. Installed as a draft the admin can edit before publishing.
  */
 class StarterCourse
 {
@@ -16,51 +15,22 @@ class StarterCourse
 
     public function install(): Course
     {
-        if ($existing = Course::firstWhere('slug', self::SLUG)) {
-            return $existing;
-        }
+        return app(CourseLibrary::class)->install(self::SLUG);
+    }
 
-        return DB::transaction(function () {
-            $course = Course::create([
-                'title' => 'Social Media Marketing Foundations',
-                'slug' => self::SLUG,
-                'summary' => 'Plan, create and grow on social media with a clear strategy, content people want, and numbers that show what works.',
-                'description' => $this->description(),
-                'level' => 'beginner',
-                'is_published' => false,
-                'is_featured' => true,
-                'certificate_enabled' => true,
-                'pass_mark' => 70,
-                'sort' => 0,
-            ]);
-
-            foreach ($this->modules() as $m => [$moduleTitle, $lessons]) {
-                $module = $course->modules()->create(['title' => $moduleTitle, 'sort' => $m]);
-
-                foreach ($lessons as $l => [$title, $minutes, $content]) {
-                    $course->lessons()->create([
-                        'course_module_id' => $module->id,
-                        'title' => $title,
-                        'content' => trim($content),
-                        'duration_minutes' => $minutes,
-                        'is_preview' => $m === 0 && $l === 0,
-                        'sort' => $l,
-                    ]);
-                }
-            }
-
-            foreach ($this->questions() as $i => [$question, $options, $correct, $explanation]) {
-                $course->questions()->create([
-                    'question' => $question,
-                    'options' => $options,
-                    'correct_option' => $correct,
-                    'explanation' => $explanation,
-                    'sort' => $i,
-                ]);
-            }
-
-            return $course;
-        });
+    /** The course in CourseLibrary's format. */
+    public function definition(): array
+    {
+        return [
+            'slug' => self::SLUG,
+            'title' => 'Social Media Marketing Foundations',
+            'summary' => 'Plan, create and grow on social media with a clear strategy, content people want, and numbers that show what works.',
+            'description' => $this->description(),
+            'level' => 'beginner',
+            'featured' => true,
+            'modules' => $this->modules(),
+            'questions' => $this->questions(),
+        ];
     }
 
     private function description(): string

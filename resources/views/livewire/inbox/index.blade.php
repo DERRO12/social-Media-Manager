@@ -183,7 +183,7 @@ new class extends Component {
             <flux:radio value="unread" label="Unread" />
             <flux:radio value="all" label="All" />
         </flux:radio.group>
-        <flux:select wire:model.live="platform" class="w-44">
+        <flux:select wire:model.live="platform" class="min-w-0 max-sm:flex-1 sm:w-44">
             <option value="">All platforms</option>
             @foreach (Platform::cases() as $p)
                 <option value="{{ $p->value }}">{{ $p->label() }}</option>

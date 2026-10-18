@@ -37,7 +37,8 @@ How it behaves:
 
 | Where | What it does |
 |---|---|
-| **Admin → Courses** | Create courses (title, level, description, cover, pass mark, published / featured / certificate on-off). One click adds a complete starter course, *Social Media Marketing Foundations* (12 lessons + 12-question exam), as a draft to edit. |
+| **Admin → Courses** | Create courses (title, level, description, cover, pass mark, published / featured / certificate on-off). |
+| **Admin → Courses → Course library** | A full social media academy ready to add in one click (each course or **Add all & publish**): *Social Media Marketing Foundations*, *TikTok Growth: Going Viral*, *Instagram Growth*, *YouTube and Shorts*, *Facebook Pages and Groups*, *LinkedIn and X*, *Great Content with Your Phone* and *Google Business Profile and Local SEO*: 56 lessons and 68 quiz questions. Courses are added as drafts you can edit (add YouTube videos, change text). New courses go in `resources/academy/*.php`. |
 | **Course → Lessons** | Modules and lessons in any order. A lesson is a **YouTube video** (any public/unlisted link), **written notes** (Markdown), or both. **Import a whole YouTube playlist** in one go (needs the YouTube API key in Settings). Mark lessons as **free preview**. |
 | **Course → Final quiz** | Multiple-choice questions (2–6 answers) with explanations shown to students who get them wrong. |
 | **Course → Students** | Who started, their progress, their certificate, revoke/restore. |
@@ -47,6 +48,17 @@ Students (any client with a trial or plan) use **Academy** in the sidebar: cours
 video lessons with notes and progress, the final quiz (unlocked after all lessons), and **My certificates**.
 Passing awards a certificate with a public verification page (`/certificates/CODE`), a print / save-as-PDF layout and an
 **Add to LinkedIn** button. Visitors without an account can browse **/courses** and watch the free preview lessons.
+
+## Grow on Google
+
+| Page | What it does |
+|---|---|
+| **Business Profile** | Builds a Google Business Profile step by step: category, keywords, services, hours, a ready-to-paste description (max 750 characters), a strength score, a Google-style preview, a setup checklist and a review link from the Place ID. Google has no API to create profiles, so the client copies the details into business.google.com. |
+| **SEO checker** | Checks any public website for 15 basics (title, description, headings, mobile, HTTPS, indexing, canonical, image alt text, social tags, structured data, speed, robots.txt, sitemap) and explains each fix. 10 checks per hour per client. It only fetches public internet addresses (private, local and cloud-metadata IPs are blocked, redirects included). |
+| **Public page** | A page at `/p/handle` listing the client's posts, plus one page per video (`/p/handle/v/…`) with structured data (VideoObject, ProfilePage) so Google can show them in search. Clients choose the handle, turn the page on or off and hide single posts. Pages disappear when the plan ends. |
+
+`/sitemap.xml` lists the public pages, courses and every live public page with its posts; `/robots.txt` points
+to it and keeps private areas out of search. Submit `https://YOUR-DOMAIN/sitemap.xml` in Google Search Console.
 
 ## What a client can do
 
@@ -60,7 +72,10 @@ Passing awards a certificate with a public verification page (`/certificates/COD
 | **Connected accounts** | Step-by-step guide; connect / reconnect / sync / disconnect YouTube, Facebook Pages, Instagram, TikTok, LinkedIn, X |
 | **Trending** | Live YouTube trending videos and music by country, plus official trend links for TikTok, Instagram, X, Facebook |
 | **Academy** | Social media marketing courses, quizzes and certificates |
+| **Grow on Google** | Business Profile builder, SEO checker, public page that shows their posts on Google |
 | **Plan & billing** | Current plan, trial days left, usage against limits, pay by card, PayPal or Mobile Money, payment history |
+
+On phones the app has a bottom tab bar (Home, Create, Inbox, Content, Learn) and the full menu behind the ☰ button.
 
 Clients never type their social passwords into this app. They click **Connect**, log in on the platform's own page
 (Google, Facebook, TikTok, …) and approve access; the platform hands back a secure access token, stored encrypted.
@@ -163,6 +178,8 @@ TikTok audit, LinkedIn product approval). Plan for this early. It usually takes 
 - `app/Services/Billing/SubscriptionManager.php` — trials, manual activation, expiry (used by admin pages and Stripe)
 - `app/Services/Billing/StripeBilling.php`, `app/Http/Controllers/StripeWebhookController.php` — optional Stripe payments
 - `app/Models/Setting.php` — admin-editable settings (secrets encrypted)
+- `app/Services/Academy/*`, `resources/academy/*.php` — course progress, certificates and the ready-made course library
+- `app/Services/Seo/*`, `app/Http/Controllers/PublicProfileController.php` — SEO checker (safe fetching), public pages, sitemap, robots.txt
 - `tests/Feature/*` — client isolation, publishing, billing and limits tests (`php artisan test`)
 
 Social access tokens and secrets saved in Admin → Settings are encrypted with `APP_KEY`.

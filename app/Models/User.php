@@ -114,6 +114,21 @@ class User extends Authenticatable // implements MustVerifyEmail
         return $this->hasMany(PaymentClaim::class);
     }
 
+    public function businessProfile(): HasOne
+    {
+        return $this->hasOne(BusinessProfile::class);
+    }
+
+    public function publicProfile(): HasOne
+    {
+        return $this->hasOne(PublicProfile::class);
+    }
+
+    public function seoAudits(): HasMany
+    {
+        return $this->hasMany(SeoAudit::class);
+    }
+
     public function completedLessonIds(): array
     {
         return LessonProgress::where('user_id', $this->id)->pluck('lesson_id')->all();
